@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sdlc_postgres_dev
+    environment:
+      POSTGRES_DB: sdlc_db
+      POSTGRES_USER: sdlc_user
+      POSTGRES_PASSWORD: sdlc_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sdlc_user -d sdlc_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sdlc_network
+
+volumes:
+  postgres_data:
+    name: sdlc_postgres_data
+
+networks:
+  sdlc_network:
+    name: sdlc_network
+    driver: bridge

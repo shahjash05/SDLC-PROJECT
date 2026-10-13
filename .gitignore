@@ -1,0 +1,89 @@
+# ===== ENVIRONMENT & SECRETS =====
+.env
+.env.local
+.env.*.local
+*.secret
+secrets/
+
+# ===== JAVA / MAVEN =====
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ===== SPRING BOOT =====
+spring-boot-*.jar
+
+# ===== NODE / NPM =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ===== FRONTEND BUILD =====
+frontend/dist/
+frontend/.vite/
+frontend/build/
+
+# ===== VITE =====
+*.local
+
+# ===== TYPESCRIPT =====
+*.tsbuildinfo
+
+# ===== EDITORS / IDEs =====
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# ===== DOCKER =====
+.docker/
+
+# ===== LOGS =====
+logs/
+*.log
+log/
+
+# ===== OS =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===== TEST COVERAGE =====
+coverage/
+.nyc_output/
+target/site/jacoco/
+
+# ===== MISC =====
+*.pid
+*.seed
+*.pid.lock
+.cache/
+.temp/
+.tmp/

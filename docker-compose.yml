@@ -1,0 +1,79 @@
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL 16
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sdlc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sdlc_db}
+      POSTGRES_USER: ${POSTGRES_USER:-sdlc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sdlc_pass}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sdlc_user} -d ${POSTGRES_DB:-sdlc_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sdlc_network
+
+  # ─────────────────────────────────────────────────────────────
+  # Backend — Spring Boot (Phase 0: optional, starts after DB)
+  # ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sdlc_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-sdlc_db}
+      DB_USERNAME: ${POSTGRES_USER:-sdlc_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sdlc_pass}
+      SERVER_PORT: 8080
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    networks:
+      - sdlc_network
+    profiles:
+      - full   # Only starts with: docker compose --profile full up
+
+  # ─────────────────────────────────────────────────────────────
+  # Frontend — React/Vite (Phase 0: optional)
+  # ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sdlc_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - sdlc_network
+    profiles:
+      - full   # Only starts with: docker compose --profile full up
+
+volumes:
+  postgres_data:
+    name: sdlc_postgres_data
+    driver: local
+
+networks:
+  sdlc_network:
+    name: sdlc_network
+    driver: bridge
