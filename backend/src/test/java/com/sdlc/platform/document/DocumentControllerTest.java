@@ -272,4 +272,161 @@ class DocumentControllerTest {
                         .header("Authorization", "Bearer " + memberToken))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void createAndManagePRD_succeedsWithVersionHistory() throws Exception {
+        String prdJson = """
+            {
+                "problemStatement": "Developers lack automated SDLC documentation tracing.",
+                "scope": {
+                    "inScope": ["PRD authoring", "Requirement linking"],
+                    "outOfScope": ["Third-party Jira bi-directional sync"]
+                },
+                "functionalRequirements": [
+                    {"id": "FR-1", "title": "Requirements Editor", "description": "Support PRD sections", "priority": "HIGH"}
+                ],
+                "nonFunctionalRequirements": [
+                    {"category": "Performance", "requirement": "Render within 200ms"}
+                ],
+                "acceptanceCriteria": ["User can author PRD", "User can link user stories"],
+                "linkedStoryIds": []
+            }
+            """;
+
+        CreateDocumentRequest createReq = new CreateDocumentRequest(
+                "Core Platform PRD",
+                DocumentType.PRODUCT_REQUIREMENTS,
+                prdJson,
+                null
+        );
+
+        String createRes = mockMvc.perform(post("/api/v1/projects/" + testProject.getId() + "/documents")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.type").value("PRODUCT_REQUIREMENTS"))
+                .andExpect(jsonPath("$.data.currentVersion").value(1))
+                .andReturn().getResponse().getContentAsString();
+
+        String docId = objectMapper.readTree(createRes).get("data").get("id").asText();
+
+        // Update PRD to v2
+        String updatedPrdJson = prdJson.replace("within 200ms", "within 150ms");
+        UpdateDocumentRequest updateReq = new UpdateDocumentRequest(
+                "Core Platform PRD",
+                DocumentType.PRODUCT_REQUIREMENTS,
+                updatedPrdJson,
+                null,
+                DocumentStatus.IN_REVIEW,
+                "Refined NFR response latency requirement"
+        );
+
+        mockMvc.perform(put("/api/v1/documents/" + docId)
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.currentVersion").value(2))
+                .andExpect(jsonPath("$.data.status").value("IN_REVIEW"));
+    }
+
+    @Test
+    void createAndManageAPIDesign_withProposedEndpoints() throws Exception {
+        String apiDesignJson = """
+            {
+                "basePath": "/api/v1",
+                "version": "1.0.0",
+                "lifecycle": "PROPOSED",
+                "endpoints": [
+                    {
+                        "id": "ep-1",
+                        "method": "GET",
+                        "path": "/documents",
+                        "summary": "List documents",
+                        "description": "Returns list of project documents",
+                        "parameters": [
+                            {"name": "type", "in": "query", "type": "string", "required": false, "description": "Filter by type"}
+                        ],
+                        "responses": [
+                            {"statusCode": 200, "description": "OK", "exampleJson": "{\\"success\\": true}"}
+                        ],
+                        "errorCodes": [
+                            {"code": "403", "reason": "Forbidden", "exampleJson": "{\\"message\\": \\"Access denied\\"}"}
+                        ]
+                    }
+                ]
+            }
+            """;
+
+        CreateDocumentRequest createReq = new CreateDocumentRequest(
+                "Document Management REST API Design",
+                DocumentType.API_DESIGN,
+                apiDesignJson,
+                null
+        );
+
+        mockMvc.perform(post("/api/v1/projects/" + testProject.getId() + "/documents")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.type").value("API_DESIGN"))
+                .andExpect(jsonPath("$.data.title").value("Document Management REST API Design"));
+    }
+
+    @Test
+    void createAndManageADR_withDecisionStatuses() throws Exception {
+        String adrJson = """
+            {
+                "context": "Need consistent database migration handling.",
+                "problemDrivers": ["Automated migrations", "Zero manual schema drift"],
+                "optionsConsidered": [
+                    {"option": "Flyway", "pros": "Simple SQL migrations", "cons": "Java-centric"},
+                    {"option": "Liquibase", "pros": "XML/YAML abstraction", "cons": "More verbose"}
+                ],
+                "decision": "Adopt Flyway for all schema migrations.",
+                "rationale": "Flyway matches our PostgreSQL and Spring Boot stack directly.",
+                "consequences": {
+                    "positive": ["Deterministic schema changes across environments"],
+                    "negative": ["Requires immutable migration scripts"]
+                }
+            }
+            """;
+
+        CreateDocumentRequest createReq = new CreateDocumentRequest(
+                "ADR-001 Database Migration Framework",
+                DocumentType.DECISION_RECORD,
+                adrJson,
+                null
+        );
+
+        String createRes = mockMvc.perform(post("/api/v1/projects/" + testProject.getId() + "/documents")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.type").value("DECISION_RECORD"))
+                .andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andReturn().getResponse().getContentAsString();
+
+        String docId = objectMapper.readTree(createRes).get("data").get("id").asText();
+
+        // Update status to PROPOSED then ACCEPTED
+        UpdateDocumentStatusRequest statusReq1 = new UpdateDocumentStatusRequest(DocumentStatus.PROPOSED);
+        mockMvc.perform(patch("/api/v1/documents/" + docId + "/status")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(statusReq1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PROPOSED"));
+
+        UpdateDocumentStatusRequest statusReq2 = new UpdateDocumentStatusRequest(DocumentStatus.ACCEPTED);
+        mockMvc.perform(patch("/api/v1/documents/" + docId + "/status")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(statusReq2)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACCEPTED"));
+    }
 }

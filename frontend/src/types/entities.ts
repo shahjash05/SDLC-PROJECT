@@ -267,9 +267,129 @@ export type DocumentType =
   | 'PRODUCT_REQUIREMENTS'
   | 'GENERAL';
 
-export type DocumentStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'DEPRECATED';
+export type DocumentStatus =
+  | 'DRAFT'
+  | 'IN_REVIEW'
+  | 'APPROVED'
+  | 'DEPRECATED'
+  | 'PROPOSED'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'SUPERSEDED';
 
 export type DiagramSyntax = 'MERMAID' | 'PLANTUML' | 'NONE';
+
+// ============================================================================
+// Specialized Structured Content Models for Phase 4 Categories
+// ============================================================================
+
+export interface FunctionalRequirementItem {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface NonFunctionalRequirementItem {
+  category: string;
+  requirement: string;
+}
+
+export interface ProductRequirementContent {
+  problemStatement: string;
+  scope: {
+    inScope: string[];
+    outOfScope: string[];
+  };
+  functionalRequirements: FunctionalRequirementItem[];
+  nonFunctionalRequirements: NonFunctionalRequirementItem[];
+  acceptanceCriteria: string[];
+  linkedStoryIds?: string[];
+}
+
+export interface ApiParameterItem {
+  name: string;
+  in: 'path' | 'query' | 'header';
+  type: string;
+  required: boolean;
+  description: string;
+}
+
+export interface ApiResponseItem {
+  statusCode: number;
+  description: string;
+  exampleJson?: string;
+}
+
+export interface ApiErrorCodeItem {
+  code: string;
+  reason: string;
+  exampleJson?: string;
+}
+
+export interface ApiEndpointItem {
+  id: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  path: string;
+  summary: string;
+  description: string;
+  parameters: ApiParameterItem[];
+  requestBody?: {
+    contentType: string;
+    schemaDescription: string;
+    exampleJson: string;
+  };
+  responses: ApiResponseItem[];
+  errorCodes: ApiErrorCodeItem[];
+}
+
+export interface ApiDesignContent {
+  basePath: string;
+  version: string;
+  lifecycle: 'PROPOSED' | 'DRAFT' | 'IMPLEMENTED' | 'DEPRECATED';
+  endpoints: ApiEndpointItem[];
+}
+
+export interface TechChoiceItem {
+  technology: string;
+  role: string;
+  rationale: string;
+}
+
+export interface ComponentResponsibilityItem {
+  component: string;
+  responsibility: string;
+}
+
+export interface TechnicalSpecContent {
+  architectureOverview: string;
+  technologyChoices: TechChoiceItem[];
+  componentResponsibilities: ComponentResponsibilityItem[];
+  databaseDesign: string;
+  dataFlow: string;
+  securityConsiderations: string;
+  implementationDetails: string;
+  linkedDiagramIds?: string[];
+  linkedRequirementIds?: string[];
+}
+
+export interface AdrOptionItem {
+  option: string;
+  pros: string;
+  cons: string;
+}
+
+export interface DecisionRecordContent {
+  context: string;
+  problemDrivers: string[];
+  optionsConsidered: AdrOptionItem[];
+  decision: string;
+  rationale: string;
+  consequences: {
+    positive: string[];
+    negative: string[];
+  };
+}
 
 export interface DocumentSummary {
   id: string;
@@ -322,5 +442,6 @@ export interface UpdateDocumentPayload {
 export interface UpdateDocumentStatusPayload {
   status: DocumentStatus;
 }
+
 
 

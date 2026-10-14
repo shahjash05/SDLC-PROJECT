@@ -14,6 +14,11 @@ import {
   FileCode,
   FolderGit2,
   Sparkles,
+  HelpCircle,
+  XCircle,
+  Scale,
+  Globe,
+  BookOpen,
 } from 'lucide-react';
 import type {
   ProjectSummary,
@@ -25,6 +30,11 @@ import type {
   DiagramSyntax,
   CreateDocumentPayload,
   UpdateDocumentPayload,
+  StorySummary,
+  ProductRequirementContent,
+  ApiDesignContent,
+  TechnicalSpecContent,
+  DecisionRecordContent,
 } from '../../types/entities';
 import {
   getDocumentsForProject,
@@ -34,9 +44,30 @@ import {
   getDocumentVersions,
   deleteDocument,
 } from '../../api/documents';
-
+import { getStories } from '../../api/requirements';
 import { getAllProjects } from '../../api/projects';
 import { DiagramRenderer } from './DiagramRenderer';
+
+import {
+  PrdEditorAndView,
+  parsePrdContent,
+  defaultPrdContent,
+} from './document/PrdEditorAndView';
+import {
+  ApiDesignEditorAndView,
+  parseApiDesignContent,
+  defaultApiDesignContent,
+} from './document/ApiDesignEditorAndView';
+import {
+  TechnicalSpecEditorAndView,
+  parseTechnicalSpecContent,
+  defaultTechnicalSpecContent,
+} from './document/TechnicalSpecEditorAndView';
+import {
+  AdrEditorAndView,
+  parseDecisionRecordContent,
+  defaultDecisionRecordContent,
+} from './document/AdrEditorAndView';
 
 interface DocumentDiagramViewProps {
   projects?: ProjectSummary[];
@@ -103,7 +134,6 @@ export function DocumentDiagramView({
 
   const projects = internalProjects;
 
-  // Sync with prop if it changes
   useEffect(() => {
     if (selectedProjectId) {
       setActiveProjectId(selectedProjectId);
@@ -120,6 +150,9 @@ export function DocumentDiagramView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Available project entities for cross-linking
+  const [projectStories, setProjectStories] = useState<StorySummary[]>([]);
+
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -135,6 +168,11 @@ export function DocumentDiagramView({
   const [createType, setCreateType] = useState<DocumentType>('ARCHITECTURE_DIAGRAM');
   const [createDiagramSyntax, setCreateDiagramSyntax] = useState<DiagramSyntax>('MERMAID');
   const [createContent, setCreateContent] = useState(MERMAID_SAMPLE_TEMPLATE);
+  const [createPrdState, setCreatePrdState] = useState<ProductRequirementContent>(defaultPrdContent());
+  const [createApiState, setCreateApiState] = useState<ApiDesignContent>(defaultApiDesignContent());
+  const [createTechState, setCreateTechState] = useState<TechnicalSpecContent>(defaultTechnicalSpecContent());
+  const [createAdrState, setCreateAdrState] = useState<DecisionRecordContent>(defaultDecisionRecordContent());
+  const [createAdrStatus, setCreateAdrStatus] = useState<DocumentStatus>('PROPOSED');
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -145,6 +183,10 @@ export function DocumentDiagramView({
   const [editStatus, setEditStatus] = useState<DocumentStatus>('DRAFT');
   const [editContent, setEditContent] = useState('');
   const [editChangeSummary, setEditChangeSummary] = useState('');
+  const [editPrdState, setEditPrdState] = useState<ProductRequirementContent>(defaultPrdContent());
+  const [editApiState, setEditApiState] = useState<ApiDesignContent>(defaultApiDesignContent());
+  const [editTechState, setEditTechState] = useState<TechnicalSpecContent>(defaultTechnicalSpecContent());
+  const [editAdrState, setEditAdrState] = useState<DecisionRecordContent>(defaultDecisionRecordContent());
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -169,6 +211,14 @@ export function DocumentDiagramView({
     }
   }, [activeProjectId, selectedTypeFilter]);
 
+  // Load project stories for cross-linking
+  useEffect(() => {
+    if (!activeProjectId) return;
+    getStories(activeProjectId)
+      .then((stories) => setProjectStories(stories))
+      .catch(() => setProjectStories([]));
+  }, [activeProjectId]);
+
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
@@ -188,6 +238,17 @@ export function DocumentDiagramView({
       setEditStatus(detail.status);
       setEditContent(detail.content || '');
       setEditChangeSummary('');
+
+      // Populate category-specific structured state
+      if (detail.type === 'PRODUCT_REQUIREMENTS') {
+        setEditPrdState(parsePrdContent(detail.content));
+      } else if (detail.type === 'API_DESIGN') {
+        setEditApiState(parseApiDesignContent(detail.content));
+      } else if (detail.type === 'TECHNICAL_SPEC') {
+        setEditTechState(parseTechnicalSpecContent(detail.content));
+      } else if (detail.type === 'DECISION_RECORD') {
+        setEditAdrState(parseDecisionRecordContent(detail.content));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to fetch document details');
       setShowDetailModal(false);
@@ -212,6 +273,29 @@ export function DocumentDiagramView({
     }
   };
 
+  // Helper to serialize content payload based on type
+  const serializeContentForType = (
+    type: DocumentType,
+    rawContent: string,
+    prd: ProductRequirementContent,
+    api: ApiDesignContent,
+    tech: TechnicalSpecContent,
+    adr: DecisionRecordContent
+  ): string => {
+    switch (type) {
+      case 'PRODUCT_REQUIREMENTS':
+        return JSON.stringify(prd, null, 2);
+      case 'API_DESIGN':
+        return JSON.stringify(api, null, 2);
+      case 'TECHNICAL_SPEC':
+        return JSON.stringify(tech, null, 2);
+      case 'DECISION_RECORD':
+        return JSON.stringify(adr, null, 2);
+      default:
+        return rawContent;
+    }
+  };
+
   // Create Document Submit
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,16 +307,29 @@ export function DocumentDiagramView({
     setSubmittingCreate(true);
     setCreateError(null);
     try {
+      const contentToSave = serializeContentForType(
+        createType,
+        createContent,
+        createPrdState,
+        createApiState,
+        createTechState,
+        createAdrState
+      );
+
       const payload: CreateDocumentPayload = {
         title: createTitle.trim(),
         type: createType,
         diagramSyntax: createType === 'ARCHITECTURE_DIAGRAM' ? createDiagramSyntax : undefined,
-        content: createContent,
+        content: contentToSave,
       };
       await createDocument(activeProjectId, payload);
       setShowCreateModal(false);
       setCreateTitle('');
       setCreateContent(createDiagramSyntax === 'PLANTUML' ? PLANTUML_SAMPLE_TEMPLATE : MERMAID_SAMPLE_TEMPLATE);
+      setCreatePrdState(defaultPrdContent());
+      setCreateApiState(defaultApiDesignContent());
+      setCreateTechState(defaultTechnicalSpecContent());
+      setCreateAdrState(defaultDecisionRecordContent());
       loadDocuments();
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create document');
@@ -252,16 +349,26 @@ export function DocumentDiagramView({
     setSubmittingEdit(true);
     setEditError(null);
     try {
+      const contentToSave = serializeContentForType(
+        editType,
+        editContent,
+        editPrdState,
+        editApiState,
+        editTechState,
+        editAdrState
+      );
+
       const payload: UpdateDocumentPayload = {
         title: editTitle.trim(),
         type: editType,
         diagramSyntax: editType === 'ARCHITECTURE_DIAGRAM' ? editDiagramSyntax : undefined,
         status: editStatus,
-        content: editContent,
+        content: contentToSave,
         changeSummary: editChangeSummary.trim() || undefined,
       };
       const updated = await updateDocument(activeDocDetail.id, payload);
       setActiveDocDetail(updated);
+      setEditContent(contentToSave);
       setEditChangeSummary('');
       setDetailTab('preview');
       loadDocuments();
@@ -288,7 +395,7 @@ export function DocumentDiagramView({
     }
   };
 
-  // Helpers for Badges
+  // Format Type Label
   const formatTypeLabel = (type: DocumentType) => {
     switch (type) {
       case 'ARCHITECTURE_DIAGRAM':
@@ -306,12 +413,48 @@ export function DocumentDiagramView({
     }
   };
 
+  const getTypeIcon = (type: DocumentType) => {
+    switch (type) {
+      case 'ARCHITECTURE_DIAGRAM':
+        return <Layers className="w-3.5 h-3.5 text-slate-700" />;
+      case 'TECHNICAL_SPEC':
+        return <FileCode className="w-3.5 h-3.5 text-slate-700" />;
+      case 'API_DESIGN':
+        return <Globe className="w-3.5 h-3.5 text-slate-700" />;
+      case 'DECISION_RECORD':
+        return <Scale className="w-3.5 h-3.5 text-slate-700" />;
+      case 'PRODUCT_REQUIREMENTS':
+        return <BookOpen className="w-3.5 h-3.5 text-slate-700" />;
+      default:
+        return <FileText className="w-3.5 h-3.5 text-slate-700" />;
+    }
+  };
+
   const getStatusBadge = (status: DocumentStatus) => {
     switch (status) {
       case 'APPROVED':
+      case 'ACCEPTED':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3 h-3" /> Approved
+            <CheckCircle2 className="w-3 h-3" /> {status === 'ACCEPTED' ? 'Accepted' : 'Approved'}
+          </span>
+        );
+      case 'PROPOSED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+            <HelpCircle className="w-3 h-3" /> Proposed
+          </span>
+        );
+      case 'REJECTED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
+            <XCircle className="w-3 h-3" /> Rejected
+          </span>
+        );
+      case 'SUPERSEDED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+            <History className="w-3 h-3" /> Superseded
           </span>
         );
       case 'IN_REVIEW':
@@ -335,6 +478,10 @@ export function DocumentDiagramView({
     }
   };
 
+  // Filter linked documents for technical specs
+  const projectDiagrams = documents.filter((d) => d.type === 'ARCHITECTURE_DIAGRAM');
+  const projectRequirements = documents.filter((d) => d.type === 'PRODUCT_REQUIREMENTS');
+
   return (
     <div className="space-y-6">
       {/* Top Header & Project Selection */}
@@ -347,7 +494,7 @@ export function DocumentDiagramView({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Author technical specifications, Mermaid architecture diagrams, and track revision history.
+            Author PRDs, API design specs, technical specifications, ADR decision records, and Mermaid/PlantUML diagrams.
           </p>
         </div>
 
@@ -379,9 +526,17 @@ export function DocumentDiagramView({
             type="button"
             onClick={() => {
               setCreateTitle('');
-              setCreateType('ARCHITECTURE_DIAGRAM');
+              setCreateType(
+                selectedTypeFilter !== 'ALL'
+                  ? (selectedTypeFilter as DocumentType)
+                  : 'PRODUCT_REQUIREMENTS'
+              );
               setCreateDiagramSyntax('MERMAID');
               setCreateContent(MERMAID_SAMPLE_TEMPLATE);
+              setCreatePrdState(defaultPrdContent());
+              setCreateApiState(defaultApiDesignContent());
+              setCreateTechState(defaultTechnicalSpecContent());
+              setCreateAdrState(defaultDecisionRecordContent());
               setCreateError(null);
               setShowCreateModal(true);
             }}
@@ -398,11 +553,11 @@ export function DocumentDiagramView({
       <div className="flex items-center gap-1 border-b border-slate-200 pb-2 overflow-x-auto">
         {[
           { id: 'ALL', label: 'All Documents' },
-          { id: 'ARCHITECTURE_DIAGRAM', label: 'Architecture Diagrams' },
-          { id: 'TECHNICAL_SPEC', label: 'Technical Specs' },
-          { id: 'API_DESIGN', label: 'API Design' },
-          { id: 'DECISION_RECORD', label: 'ADRs / Decisions' },
           { id: 'PRODUCT_REQUIREMENTS', label: 'PRDs / Requirements' },
+          { id: 'API_DESIGN', label: 'API Design' },
+          { id: 'TECHNICAL_SPEC', label: 'Technical Specs' },
+          { id: 'DECISION_RECORD', label: 'ADRs / Decisions' },
+          { id: 'ARCHITECTURE_DIAGRAM', label: 'Architecture Diagrams' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -434,7 +589,7 @@ export function DocumentDiagramView({
           </div>
           <h3 className="text-sm font-semibold text-slate-800">No projects found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Documents and architecture diagrams attach to projects. Please create an organization and a project first.
+            Documents attach to projects. Please create an organization and a project first.
           </p>
         </div>
       ) : loading ? (
@@ -450,8 +605,8 @@ export function DocumentDiagramView({
           <h3 className="text-sm font-semibold text-slate-800">No documents found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {selectedTypeFilter !== 'ALL'
-              ? `No ${formatTypeLabel(selectedTypeFilter as DocumentType)} found. Create one or clear filter.`
-              : 'Create technical specifications and Mermaid architecture diagrams to document system architecture.'}
+              ? `No ${formatTypeLabel(selectedTypeFilter as DocumentType)} found. Create one to begin.`
+              : 'Create requirements, API specifications, technical designs, or ADRs to document your architecture.'}
           </p>
           <button
             type="button"
@@ -467,16 +622,12 @@ export function DocumentDiagramView({
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="bg-white border border-slate-200 rounded-md p-4 flex flex-col justify-between hover:border-slate-300 transition-shadow hover:shadow-sm"
+              className="bg-white border border-slate-200 rounded-md p-4 flex flex-col justify-between hover:border-slate-300 transition-shadow hover:shadow-xs"
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                    {doc.type === 'ARCHITECTURE_DIAGRAM' ? (
-                      <Layers className="w-3 h-3 text-slate-600" />
-                    ) : (
-                      <FileText className="w-3 h-3 text-slate-600" />
-                    )}
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                    {getTypeIcon(doc.type)}
                     {formatTypeLabel(doc.type)}
                   </span>
                   {getStatusBadge(doc.status)}
@@ -490,11 +641,13 @@ export function DocumentDiagramView({
                   <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
                     v{doc.currentVersion}
                   </span>
-                  {doc.diagramSyntax && (
+                  {doc.diagramSyntax && doc.type === 'ARCHITECTURE_DIAGRAM' && (
                     <span className="text-slate-400 font-mono">
                       {doc.diagramSyntax}
                     </span>
                   )}
+                  <span>•</span>
+                  <span>@{doc.createdByUsername || 'user'}</span>
                   <span>•</span>
                   <span>{new Date(doc.updatedAt).toLocaleDateString()}</span>
                 </div>
@@ -509,7 +662,7 @@ export function DocumentDiagramView({
                     title="View & Preview"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    Preview
+                    View
                   </button>
                   <button
                     type="button"
@@ -534,7 +687,7 @@ export function DocumentDiagramView({
                 <button
                   type="button"
                   onClick={() => handleDeleteDoc(doc.id, doc.title)}
-                  className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                  className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
                   title="Delete Document"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -547,12 +700,12 @@ export function DocumentDiagramView({
 
       {/* CREATE DOCUMENT MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">
-                  New Document or Architecture Diagram
+                  Create New {formatTypeLabel(createType)}
                 </h3>
                 <p className="text-xs text-slate-500">
                   Project: {activeProject?.name} ({activeProject?.projectKey})
@@ -568,30 +721,16 @@ export function DocumentDiagramView({
             </div>
 
             {createError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded p-3">
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded p-3">
                 {createError}
               </div>
             )}
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Document Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., Microservices Communication Architecture"
-                  value={createTitle}
-                  onChange={(e) => setCreateTitle(e.target.value)}
-                  className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Document Type
+                    Document Category *
                   </label>
                   <select
                     value={createType}
@@ -600,87 +739,152 @@ export function DocumentDiagramView({
                       setCreateType(val);
                       if (val === 'ARCHITECTURE_DIAGRAM') {
                         setCreateDiagramSyntax('MERMAID');
-                        if (!createContent || createContent === '' || createContent === PLANTUML_SAMPLE_TEMPLATE) {
-                          setCreateContent(MERMAID_SAMPLE_TEMPLATE);
-                        }
+                        setCreateContent(MERMAID_SAMPLE_TEMPLATE);
                       }
                     }}
                     className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
                   >
-                    <option value="ARCHITECTURE_DIAGRAM">Architecture Diagram</option>
-                    <option value="TECHNICAL_SPEC">Technical Specification</option>
-                    <option value="API_DESIGN">API Design</option>
-                    <option value="DECISION_RECORD">ADR / Architecture Decision</option>
                     <option value="PRODUCT_REQUIREMENTS">PRD / Requirements</option>
+                    <option value="API_DESIGN">API Design Specification</option>
+                    <option value="TECHNICAL_SPEC">Technical Specification</option>
+                    <option value="DECISION_RECORD">ADR / Architecture Decision</option>
+                    <option value="ARCHITECTURE_DIAGRAM">Architecture Diagram</option>
                     <option value="GENERAL">General Document</option>
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Document Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={
+                      createType === 'PRODUCT_REQUIREMENTS'
+                        ? 'e.g., User Authentication & Session PRD'
+                        : createType === 'API_DESIGN'
+                        ? 'e.g., Workspace Document REST API Spec'
+                        : createType === 'DECISION_RECORD'
+                        ? 'e.g., ADR-002 Stateful vs Stateless Auth'
+                        : createType === 'TECHNICAL_SPEC'
+                        ? 'e.g., Architecture Technical Specification'
+                        : 'e.g., Microservices Communication Architecture'
+                    }
+                    value={createTitle}
+                    onChange={(e) => setCreateTitle(e.target.value)}
+                    className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Category Editor in Create Modal */}
+              <div className="border-t border-slate-100 pt-3">
+                {createType === 'PRODUCT_REQUIREMENTS' && (
+                  <PrdEditorAndView
+                    content={createPrdState}
+                    onChange={setCreatePrdState}
+                    isEditing={true}
+                    availableStories={projectStories}
+                  />
+                )}
+
+                {createType === 'API_DESIGN' && (
+                  <ApiDesignEditorAndView
+                    content={createApiState}
+                    onChange={setCreateApiState}
+                    isEditing={true}
+                  />
+                )}
+
+                {createType === 'TECHNICAL_SPEC' && (
+                  <TechnicalSpecEditorAndView
+                    content={createTechState}
+                    onChange={setCreateTechState}
+                    isEditing={true}
+                    availableDiagrams={projectDiagrams}
+                    availableRequirements={projectRequirements}
+                  />
+                )}
+
+                {createType === 'DECISION_RECORD' && (
+                  <AdrEditorAndView
+                    content={createAdrState}
+                    onChange={setCreateAdrState}
+                    isEditing={true}
+                    status={createAdrStatus}
+                    onStatusChange={setCreateAdrStatus}
+                  />
+                )}
+
                 {createType === 'ARCHITECTURE_DIAGRAM' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Diagram Engine / Syntax
-                    </label>
-                    <select
-                      value={createDiagramSyntax}
-                      onChange={(e) => {
-                        const newSyntax = e.target.value as DiagramSyntax;
-                        setCreateDiagramSyntax(newSyntax);
-                        if (newSyntax === 'PLANTUML') {
-                          if (!createContent || createContent === '' || createContent === MERMAID_SAMPLE_TEMPLATE) {
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Diagram Engine / Syntax
+                      </label>
+                      <select
+                        value={createDiagramSyntax}
+                        onChange={(e) => {
+                          const newSyntax = e.target.value as DiagramSyntax;
+                          setCreateDiagramSyntax(newSyntax);
+                          if (newSyntax === 'PLANTUML') {
                             setCreateContent(PLANTUML_SAMPLE_TEMPLATE);
-                          }
-                        } else if (newSyntax === 'MERMAID') {
-                          if (!createContent || createContent === '' || createContent === PLANTUML_SAMPLE_TEMPLATE) {
+                          } else {
                             setCreateContent(MERMAID_SAMPLE_TEMPLATE);
                           }
-                        }
-                      }}
-                      className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                    >
-                      <option value="MERMAID">Mermaid.js</option>
-                      <option value="PLANTUML">PlantUML</option>
-                      <option value="NONE">Plain Text / Markdown</option>
-                    </select>
+                        }}
+                        className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900"
+                      >
+                        <option value="MERMAID">Mermaid.js</option>
+                        <option value="PLANTUML">PlantUML</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-semibold text-slate-700">
+                          Diagram Syntax Definition *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCreateContent(
+                              createDiagramSyntax === 'PLANTUML'
+                                ? PLANTUML_SAMPLE_TEMPLATE
+                                : MERMAID_SAMPLE_TEMPLATE
+                            );
+                          }}
+                          className="text-[11px] text-slate-500 hover:text-slate-900 inline-flex items-center gap-1"
+                        >
+                          <Sparkles className="w-3 h-3" /> Load Sample
+                        </button>
+                      </div>
+                      <textarea
+                        rows={8}
+                        value={createContent}
+                        onChange={(e) => setCreateContent(e.target.value)}
+                        className="w-full text-xs font-mono border border-slate-300 rounded p-3 bg-slate-50 text-slate-900"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {createType === 'GENERAL' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Content</label>
+                    <textarea
+                      rows={8}
+                      value={createContent}
+                      onChange={(e) => setCreateContent(e.target.value)}
+                      placeholder="Enter Markdown or plain text content..."
+                      className="w-full text-xs font-mono border border-slate-300 rounded p-3 bg-white text-slate-900"
+                    />
                   </div>
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Content / Diagram Definition *
-                  </label>
-                  {createType === 'ARCHITECTURE_DIAGRAM' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (createDiagramSyntax === 'PLANTUML') {
-                          setCreateContent(PLANTUML_SAMPLE_TEMPLATE);
-                        } else {
-                          setCreateContent(MERMAID_SAMPLE_TEMPLATE);
-                        }
-                      }}
-                      className="text-[11px] text-slate-500 hover:text-slate-900 inline-flex items-center gap-1"
-                    >
-                      <Sparkles className="w-3 h-3" /> Load Sample {createDiagramSyntax === 'PLANTUML' ? 'PlantUML Diagram' : 'Mermaid Flowchart'}
-                    </button>
-                  )}
-                </div>
-                <textarea
-                  rows={8}
-                  value={createContent}
-                  onChange={(e) => setCreateContent(e.target.value)}
-                  placeholder={
-                    createDiagramSyntax === 'PLANTUML'
-                      ? 'Enter PlantUML syntax (e.g., @startuml ... @enduml)'
-                      : 'Enter Markdown or Mermaid syntax...'
-                  }
-                  className="w-full text-xs font-mono border border-slate-300 rounded p-3 bg-slate-50 text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
@@ -703,7 +907,7 @@ export function DocumentDiagramView({
 
       {/* DETAIL & EDITOR MODAL */}
       {showDetailModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-4xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             {loadingDetail ? (
               <div className="py-12 text-center text-xs text-slate-500">
@@ -723,7 +927,7 @@ export function DocumentDiagramView({
                       {getStatusBadge(activeDocDetail.status)}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Type: {formatTypeLabel(activeDocDetail.type)} • Author: @{activeDocDetail.createdByUsername || 'system'}
+                      Category: {formatTypeLabel(activeDocDetail.type)} • Author: @{activeDocDetail.createdByUsername || 'user'}
                     </p>
                   </div>
 
@@ -757,7 +961,7 @@ export function DocumentDiagramView({
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    <Eye className="w-3.5 h-3.5" /> Preview Document
+                    <Eye className="w-3.5 h-3.5" /> View & Preview
                   </button>
                   <button
                     type="button"
@@ -773,23 +977,59 @@ export function DocumentDiagramView({
                 </div>
 
                 {detailTab === 'preview' ? (
+                  /* VIEW / PREVIEW TAB */
                   <div className="space-y-4">
-                    {activeDocDetail.type === 'ARCHITECTURE_DIAGRAM' ? (
+                    {activeDocDetail.type === 'ARCHITECTURE_DIAGRAM' && (
                       <DiagramRenderer
                         syntax={activeDocDetail.diagramSyntax || 'MERMAID'}
                         content={activeDocDetail.content || ''}
                         title={activeDocDetail.title}
                       />
-                    ) : (
+                    )}
+
+                    {activeDocDetail.type === 'PRODUCT_REQUIREMENTS' && (
+                      <PrdEditorAndView
+                        content={parsePrdContent(activeDocDetail.content)}
+                        isEditing={false}
+                        availableStories={projectStories}
+                      />
+                    )}
+
+                    {activeDocDetail.type === 'API_DESIGN' && (
+                      <ApiDesignEditorAndView
+                        content={parseApiDesignContent(activeDocDetail.content)}
+                        isEditing={false}
+                      />
+                    )}
+
+                    {activeDocDetail.type === 'TECHNICAL_SPEC' && (
+                      <TechnicalSpecEditorAndView
+                        content={parseTechnicalSpecContent(activeDocDetail.content)}
+                        isEditing={false}
+                        availableDiagrams={projectDiagrams}
+                        availableRequirements={projectRequirements}
+                      />
+                    )}
+
+                    {activeDocDetail.type === 'DECISION_RECORD' && (
+                      <AdrEditorAndView
+                        content={parseDecisionRecordContent(activeDocDetail.content)}
+                        status={activeDocDetail.status}
+                        isEditing={false}
+                      />
+                    )}
+
+                    {activeDocDetail.type === 'GENERAL' && (
                       <div className="bg-slate-50 border border-slate-200 rounded p-4 text-xs font-sans text-slate-800 whitespace-pre-wrap leading-relaxed">
                         {activeDocDetail.content || 'No content provided.'}
                       </div>
                     )}
                   </div>
                 ) : (
+                  /* EDIT & CREATE REVISION TAB */
                   <form onSubmit={handleUpdateSubmit} className="space-y-4">
                     {editError && (
-                      <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded p-3">
+                      <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded p-3">
                         {editError}
                       </div>
                     )}
@@ -810,7 +1050,7 @@ export function DocumentDiagramView({
 
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Review Status
+                          Review / Approval Status
                         </label>
                         <select
                           value={editStatus}
@@ -821,75 +1061,107 @@ export function DocumentDiagramView({
                           <option value="IN_REVIEW">In Review</option>
                           <option value="APPROVED">Approved</option>
                           <option value="DEPRECATED">Deprecated</option>
+                          {editType === 'DECISION_RECORD' && (
+                            <>
+                              <option value="PROPOSED">Proposed</option>
+                              <option value="ACCEPTED">Accepted</option>
+                              <option value="REJECTED">Rejected</option>
+                              <option value="SUPERSEDED">Superseded</option>
+                            </>
+                          )}
                         </select>
                       </div>
-
-                      {editType === 'ARCHITECTURE_DIAGRAM' && (
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">
-                            Diagram Engine / Syntax
-                          </label>
-                          <select
-                            value={editDiagramSyntax}
-                            onChange={(e) => setEditDiagramSyntax(e.target.value as DiagramSyntax)}
-                            className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                          >
-                            <option value="MERMAID">Mermaid.js</option>
-                            <option value="PLANTUML">PlantUML</option>
-                            <option value="NONE">Plain Text / Markdown</option>
-                          </select>
-                        </div>
-                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Revision Summary / Change Reason (Saved in Version History)
+                        Revision Summary / Change Reason (Stored in Version History) *
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g., Added authentication service edge routing"
+                        placeholder="e.g., Updated acceptance criteria and added endpoint query parameters"
                         value={editChangeSummary}
                         onChange={(e) => setEditChangeSummary(e.target.value)}
                         className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
                       />
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700">
-                          Document Content / Diagram Syntax
-                        </label>
-                        {editType === 'ARCHITECTURE_DIAGRAM' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (editDiagramSyntax === 'PLANTUML') {
-                                setEditContent(PLANTUML_SAMPLE_TEMPLATE);
-                              } else {
-                                setEditContent(MERMAID_SAMPLE_TEMPLATE);
-                              }
-                            }}
-                            className="text-[11px] text-slate-500 hover:text-slate-900 inline-flex items-center gap-1"
-                          >
-                            <Sparkles className="w-3 h-3" /> Load Sample {editDiagramSyntax === 'PLANTUML' ? 'PlantUML Diagram' : 'Mermaid Flowchart'}
-                          </button>
-                        )}
-                      </div>
-                      <textarea
-                        rows={10}
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        placeholder={
-                          editDiagramSyntax === 'PLANTUML'
-                            ? 'Enter PlantUML syntax (e.g., @startuml ... @enduml)'
-                            : 'Enter Markdown or Mermaid syntax...'
-                        }
-                        className="w-full text-xs font-mono border border-slate-300 rounded p-3 bg-slate-50 text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                      />
+                    {/* Specialized Category Form */}
+                    <div className="border-t border-slate-100 pt-3">
+                      {editType === 'PRODUCT_REQUIREMENTS' && (
+                        <PrdEditorAndView
+                          content={editPrdState}
+                          onChange={setEditPrdState}
+                          isEditing={true}
+                          availableStories={projectStories}
+                        />
+                      )}
+
+                      {editType === 'API_DESIGN' && (
+                        <ApiDesignEditorAndView
+                          content={editApiState}
+                          onChange={setEditApiState}
+                          isEditing={true}
+                        />
+                      )}
+
+                      {editType === 'TECHNICAL_SPEC' && (
+                        <TechnicalSpecEditorAndView
+                          content={editTechState}
+                          onChange={setEditTechState}
+                          isEditing={true}
+                          availableDiagrams={projectDiagrams}
+                          availableRequirements={projectRequirements}
+                        />
+                      )}
+
+                      {editType === 'DECISION_RECORD' && (
+                        <AdrEditorAndView
+                          content={editAdrState}
+                          onChange={setEditAdrState}
+                          status={editStatus}
+                          onStatusChange={setEditStatus}
+                          isEditing={true}
+                        />
+                      )}
+
+                      {editType === 'ARCHITECTURE_DIAGRAM' && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Diagram Engine
+                            </label>
+                            <select
+                              value={editDiagramSyntax}
+                              onChange={(e) => setEditDiagramSyntax(e.target.value as DiagramSyntax)}
+                              className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900"
+                            >
+                              <option value="MERMAID">Mermaid.js</option>
+                              <option value="PLANTUML">PlantUML</option>
+                            </select>
+                          </div>
+                          <div>
+                            <textarea
+                              rows={10}
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              className="w-full text-xs font-mono border border-slate-300 rounded p-3 bg-slate-50 text-slate-900"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {editType === 'GENERAL' && (
+                        <textarea
+                          rows={10}
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          className="w-full text-xs font-mono border border-slate-300 rounded p-3 bg-white text-slate-900"
+                        />
+                      )}
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                       <button
                         type="button"
                         onClick={() => setDetailTab('preview')}
@@ -915,7 +1187,7 @@ export function DocumentDiagramView({
 
       {/* VERSION HISTORY MODAL */}
       {showVersionHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
@@ -963,7 +1235,7 @@ export function DocumentDiagramView({
                           </span>
                         </div>
                         <p className="text-xs text-slate-600 mt-1">
-                          {ver.changeSummary || 'No change summary'}
+                          {ver.changeSummary || 'Initial creation'}
                         </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           {new Date(ver.createdAt).toLocaleString()}
@@ -991,7 +1263,7 @@ export function DocumentDiagramView({
                         <span className="text-xs font-semibold text-slate-800">
                           Historical Snapshot: v{selectedHistoricalVersion.versionNumber} ({selectedHistoricalVersion.title})
                         </span>
-                        {selectedHistoricalVersion.diagramSyntax && (
+                        {selectedHistoricalVersion.diagramSyntax && selectedHistoricalVersion.diagramSyntax !== 'NONE' && (
                           <span className="font-mono text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
                             {selectedHistoricalVersion.diagramSyntax}
                           </span>
@@ -1006,17 +1278,17 @@ export function DocumentDiagramView({
                       </button>
                     </div>
 
-                    {selectedHistoricalVersion.diagramSyntax && selectedHistoricalVersion.diagramSyntax !== 'NONE' && (
+                    {selectedHistoricalVersion.diagramSyntax && selectedHistoricalVersion.diagramSyntax !== 'NONE' ? (
                       <DiagramRenderer
                         syntax={selectedHistoricalVersion.diagramSyntax}
                         content={selectedHistoricalVersion.content}
                         title={selectedHistoricalVersion.title}
                       />
+                    ) : (
+                      <div className="bg-white border border-slate-200 rounded p-3 font-mono text-xs text-slate-800 max-h-56 overflow-y-auto whitespace-pre-wrap">
+                        {selectedHistoricalVersion.content}
+                      </div>
                     )}
-
-                    <div className="bg-white border border-slate-200 rounded p-3 font-mono text-xs text-slate-800 max-h-48 overflow-y-auto whitespace-pre-wrap">
-                      {selectedHistoricalVersion.content}
-                    </div>
                   </div>
                 )}
               </div>

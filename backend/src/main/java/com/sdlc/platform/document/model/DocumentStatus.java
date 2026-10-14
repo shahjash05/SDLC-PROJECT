@@ -4,5 +4,9 @@ public enum DocumentStatus {
     DRAFT,
     IN_REVIEW,
     APPROVED,
-    DEPRECATED
+    DEPRECATED,
+    PROPOSED,
+    ACCEPTED,
+    REJECTED,
+    SUPERSEDED
 }

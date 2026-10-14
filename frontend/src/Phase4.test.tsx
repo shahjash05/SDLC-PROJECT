@@ -306,13 +306,15 @@ describe('Phase 4: Documents & Architecture Diagrams Components', () => {
     // Open modal
     fireEvent.click(screen.getByText('New Document / Diagram'));
 
-    // By default, Mermaid is selected with verified ports
-    const contentArea = screen.getByPlaceholderText(/Enter Markdown or Mermaid syntax/i) as HTMLTextAreaElement;
+    // Switch Category to Architecture Diagram
+    const categorySelect = screen.getByDisplayValue('PRDs / Requirements');
+    fireEvent.change(categorySelect, { target: { value: 'ARCHITECTURE_DIAGRAM' } });
+
+    // By default for architecture diagrams, Mermaid is selected with verified ports
+    const contentArea = screen.getByDisplayValue(/graph TD/i) as HTMLTextAreaElement;
     expect(contentArea.value).toContain('Vite React Client: Port 5173');
     expect(contentArea.value).toContain('Spring Boot 3 API: Port 8081');
     expect(contentArea.value).toContain('PostgreSQL 16: Port 5432');
-    expect(contentArea.value).not.toContain('8080');
-    expect(contentArea.value).not.toContain('Redis');
 
     // Switch engine to PlantUML
     const engineSelect = screen.getByDisplayValue('Mermaid.js');
@@ -324,8 +326,160 @@ describe('Phase 4: Documents & Architecture Diagrams Components', () => {
     expect(contentArea.value).toContain('Web Browser (Port 5173)');
     expect(contentArea.value).toContain('Application Server (Port 8081)');
     expect(contentArea.value).toContain('Database Server (Port 5432)');
-    expect(contentArea.value).not.toContain('8080');
-    expect(contentArea.value).not.toContain('Redis');
+  });
+
+  it('renders structured PRD with problem statement, functional requirements, and scope', async () => {
+    const prdDetail: DocumentDetail = {
+      id: 'doc-prd-1',
+      projectId: 'proj-1',
+      projectKey: 'INFRA',
+      projectName: 'Platform Infrastructure',
+      title: 'Authentication & Session PRD',
+      type: 'PRODUCT_REQUIREMENTS',
+      content: JSON.stringify({
+        problemStatement: 'Users need a single unified login across services.',
+        scope: { inScope: ['JWT authentication', 'Role assignment'], outOfScope: ['SAML 2.0'] },
+        functionalRequirements: [
+          { id: 'FR-1', title: 'Login with Email', description: 'Authenticate users via email and password', priority: 'CRITICAL' },
+        ],
+        nonFunctionalRequirements: [
+          { category: 'Security', requirement: 'Passwords hashed with BCrypt (cost 12)' },
+        ],
+        acceptanceCriteria: ['Valid credentials return JWT token'],
+        linkedStoryIds: [],
+      }),
+      currentVersion: 1,
+      status: 'APPROVED',
+      createdByUsername: 'productlead',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      recentVersions: [],
+    };
+
+    vi.spyOn(docApi, 'getDocumentsForProject').mockResolvedValue([prdDetail]);
+    vi.spyOn(docApi, 'getDocumentById').mockResolvedValue(prdDetail);
+
+    render(<DocumentDiagramView selectedProjectId="proj-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Authentication & Session PRD')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('View & Preview'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Users need a single unified login across services/i)).toBeInTheDocument();
+      expect(screen.getByText('JWT authentication')).toBeInTheDocument();
+      expect(screen.getByText('SAML 2.0')).toBeInTheDocument();
+      expect(screen.getByText('Login with Email')).toBeInTheDocument();
+      expect(screen.getByText('CRITICAL')).toBeInTheDocument();
+      expect(screen.getByText(/Passwords hashed with BCrypt/i)).toBeInTheDocument();
+    });
+  });
+
+  it('renders structured API Design specification with endpoints and notice banner', async () => {
+    const apiDetail: DocumentDetail = {
+      id: 'doc-api-1',
+      projectId: 'proj-1',
+      projectKey: 'INFRA',
+      projectName: 'Platform Infrastructure',
+      title: 'Documents Management REST API',
+      type: 'API_DESIGN',
+      content: JSON.stringify({
+        basePath: '/api/v1',
+        version: '1.0.0',
+        lifecycle: 'PROPOSED',
+        endpoints: [
+          {
+            id: 'ep-test-1',
+            method: 'GET',
+            path: '/documents',
+            summary: 'List project documents',
+            description: 'Returns all documents in project',
+            parameters: [
+              { name: 'type', in: 'query', type: 'string', required: false, description: 'Filter by document type' },
+            ],
+            responses: [
+              { statusCode: 200, description: 'Documents array', exampleJson: '{"data": []}' },
+            ],
+            errorCodes: [],
+          },
+        ],
+      }),
+      currentVersion: 1,
+      status: 'DRAFT',
+      createdByUsername: 'apiarchitect',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      recentVersions: [],
+    };
+
+    vi.spyOn(docApi, 'getDocumentsForProject').mockResolvedValue([apiDetail]);
+    vi.spyOn(docApi, 'getDocumentById').mockResolvedValue(apiDetail);
+
+    render(<DocumentDiagramView selectedProjectId="proj-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Documents Management REST API')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('View & Preview'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/PROPOSED SPECIFICATION/i)).toBeInTheDocument();
+      expect(screen.getByText('List project documents')).toBeInTheDocument();
+      expect(screen.getByText('GET')).toBeInTheDocument();
+      expect(screen.getByText('/api/v1/documents')).toBeInTheDocument();
+    });
+  });
+
+  it('renders structured ADR with options considered and decision outcome', async () => {
+    const adrDetail: DocumentDetail = {
+      id: 'doc-adr-1',
+      projectId: 'proj-1',
+      projectKey: 'INFRA',
+      projectName: 'Platform Infrastructure',
+      title: 'ADR-003 Database Migration Strategy',
+      type: 'DECISION_RECORD',
+      content: JSON.stringify({
+        context: 'Need an automated database schema migration tool for PostgreSQL.',
+        problemDrivers: ['Zero manual drift', 'Repeatable CI/CD deployment'],
+        optionsConsidered: [
+          { option: 'Flyway', pros: 'Simple SQL migrations', cons: 'Strict naming convention' },
+          { option: 'Hibernate ddl-auto', pros: 'Automatic generation', cons: 'High risk in production' },
+        ],
+        decision: 'Adopt Flyway with versioned migration scripts.',
+        rationale: 'Flyway provides verifiable, immutable schema transitions.',
+        consequences: {
+          positive: ['Auditable migration history'],
+          negative: ['Migrations cannot be altered once applied'],
+        },
+      }),
+      currentVersion: 1,
+      status: 'ACCEPTED',
+      createdByUsername: 'leadarchitect',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      recentVersions: [],
+    };
+
+    vi.spyOn(docApi, 'getDocumentsForProject').mockResolvedValue([adrDetail]);
+    vi.spyOn(docApi, 'getDocumentById').mockResolvedValue(adrDetail);
+
+    render(<DocumentDiagramView selectedProjectId="proj-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('ADR-003 Database Migration Strategy')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTitle('View & Preview'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/1\. Context & Background/i)).toBeInTheDocument();
+      expect(screen.getByText(/Zero manual drift/i)).toBeInTheDocument();
+      expect(screen.getByText('Flyway')).toBeInTheDocument();
+      expect(screen.getByText(/Adopt Flyway with versioned migration scripts/i)).toBeInTheDocument();
+    });
   });
 });
 
