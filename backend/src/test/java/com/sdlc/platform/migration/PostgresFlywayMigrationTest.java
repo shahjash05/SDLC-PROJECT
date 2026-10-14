@@ -34,7 +34,7 @@ class PostgresFlywayMigrationTest {
 
         MigrationInfo[] appliedMigrations = flyway.info().applied();
 
-        assertTrue(appliedMigrations.length >= 4, "Expected at least V1, V2, V3, and V4 migrations to be applied");
+        assertTrue(appliedMigrations.length >= 5, "Expected at least V1, V2, V3, V4, and V5 migrations to be applied");
 
         MigrationInfo v1 = appliedMigrations[0];
         assertEquals("1", v1.getVersion().getVersion());
@@ -55,5 +55,10 @@ class PostgresFlywayMigrationTest {
         assertEquals("4", v4.getVersion().getVersion());
         assertEquals("requirements and sprints schema", v4.getDescription());
         assertEquals(MigrationState.SUCCESS, v4.getState());
+
+        MigrationInfo v5 = appliedMigrations[4];
+        assertEquals("5", v5.getVersion().getVersion());
+        assertEquals("documents and diagrams schema", v5.getDescription());
+        assertEquals(MigrationState.SUCCESS, v5.getState());
     }
 }

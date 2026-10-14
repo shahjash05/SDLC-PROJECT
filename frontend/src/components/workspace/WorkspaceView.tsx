@@ -9,11 +9,13 @@ import {
   Users,
   FolderGit2,
   Kanban,
+  FileCode,
 } from 'lucide-react';
 import { OrganizationSection } from './OrganizationSection';
 import { TeamSection } from './TeamSection';
 import { ProjectSection } from './ProjectSection';
 import { SprintBoardView } from './SprintBoardView';
+import { DocumentDiagramView } from './DocumentDiagramView';
 
 function formatRoleName(role: string): string {
   switch (role) {
@@ -34,11 +36,12 @@ function formatRoleName(role: string): string {
 
 export function WorkspaceView() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'organizations' | 'teams' | 'projects' | 'sprints' | 'profile'>('organizations');
+  const [activeTab, setActiveTab] = useState<'organizations' | 'teams' | 'projects' | 'sprints' | 'documents' | 'profile'>('organizations');
   const [selectedOrgIdForTeams, setSelectedOrgIdForTeams] = useState<string | null>(null);
   const [selectedOrgIdForProjects, setSelectedOrgIdForProjects] = useState<string | null>(null);
   const [selectedTeamIdForProjects, setSelectedTeamIdForProjects] = useState<string | null>(null);
   const [selectedProjectIdForSprints, setSelectedProjectIdForSprints] = useState<string | null>(null);
+  const [selectedProjectIdForDocs, setSelectedProjectIdForDocs] = useState<string | null>(null);
 
   if (!user) {
     return null;
@@ -64,6 +67,11 @@ export function WorkspaceView() {
   const navigateToSprintsFromProject = (projectId: string) => {
     setSelectedProjectIdForSprints(projectId);
     setActiveTab('sprints');
+  };
+
+  const navigateToDocsFromProject = (projectId: string) => {
+    setSelectedProjectIdForDocs(projectId);
+    setActiveTab('documents');
   };
 
   return (
@@ -169,6 +177,19 @@ export function WorkspaceView() {
 
         <button
           type="button"
+          onClick={() => setActiveTab('documents')}
+          className={`pb-2.5 px-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            activeTab === 'documents'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FileCode className="w-4 h-4" />
+          Docs &amp; Diagrams
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('profile')}
           className={`pb-2.5 px-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ml-auto ${
             activeTab === 'profile'
@@ -201,11 +222,16 @@ export function WorkspaceView() {
           initialOrgId={selectedOrgIdForProjects}
           initialTeamId={selectedTeamIdForProjects}
           onSelectProjectForSprints={navigateToSprintsFromProject}
+          onSelectProjectForDocs={navigateToDocsFromProject}
         />
       )}
 
       {activeTab === 'sprints' && (
         <SprintBoardView initialProjectId={selectedProjectIdForSprints} />
+      )}
+
+      {activeTab === 'documents' && (
+        <DocumentDiagramView selectedProjectId={selectedProjectIdForDocs} />
       )}
 
       {activeTab === 'profile' && (

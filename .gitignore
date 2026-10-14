@@ -4,6 +4,8 @@
 .env.*.local
 *.secret
 secrets/
+token.txt
+*.token
 
 # ===== JAVA / MAVEN =====
 target/

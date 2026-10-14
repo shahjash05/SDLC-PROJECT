@@ -255,3 +255,72 @@ export interface UpdateTaskPayload {
   assigneeId?: string;
 }
 
+// ============================================================================
+// Phase 4: Architecture Diagrams, Design Documents & Versioning
+// ============================================================================
+
+export type DocumentType =
+  | 'ARCHITECTURE_DIAGRAM'
+  | 'TECHNICAL_SPEC'
+  | 'API_DESIGN'
+  | 'DECISION_RECORD'
+  | 'PRODUCT_REQUIREMENTS'
+  | 'GENERAL';
+
+export type DocumentStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'DEPRECATED';
+
+export type DiagramSyntax = 'MERMAID' | 'PLANTUML' | 'NONE';
+
+export interface DocumentSummary {
+  id: string;
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  title: string;
+  type: DocumentType;
+  diagramSyntax?: DiagramSyntax;
+  currentVersion: number;
+  status: DocumentStatus;
+  createdByUsername?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  title: string;
+  content: string;
+  diagramSyntax?: DiagramSyntax;
+  changeSummary?: string;
+  createdByUsername?: string;
+  createdAt: string;
+}
+
+export interface DocumentDetail extends DocumentSummary {
+  content?: string;
+  recentVersions: DocumentVersion[];
+}
+
+export interface CreateDocumentPayload {
+  title: string;
+  type?: DocumentType;
+  content?: string;
+  diagramSyntax?: DiagramSyntax;
+}
+
+export interface UpdateDocumentPayload {
+  title: string;
+  type?: DocumentType;
+  content?: string;
+  diagramSyntax?: DiagramSyntax;
+  status?: DocumentStatus;
+  changeSummary?: string;
+}
+
+export interface UpdateDocumentStatusPayload {
+  status: DocumentStatus;
+}
+
+

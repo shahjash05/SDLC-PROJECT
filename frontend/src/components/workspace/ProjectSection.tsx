@@ -10,6 +10,7 @@ import {
   Users,
   Edit2,
   Kanban,
+  FileCode,
 } from 'lucide-react';
 import type {
   OrganizationSummary,
@@ -25,6 +26,7 @@ interface ProjectSectionProps {
   initialOrgId?: string | null;
   initialTeamId?: string | null;
   onSelectProjectForSprints?: (projectId: string) => void;
+  onSelectProjectForDocs?: (projectId: string) => void;
 }
 
 function getStatusBadgeClass(status: ProjectStatus): string {
@@ -48,6 +50,7 @@ export function ProjectSection({
   initialOrgId,
   initialTeamId,
   onSelectProjectForSprints,
+  onSelectProjectForDocs,
 }: ProjectSectionProps) {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(initialOrgId || 'ALL');
@@ -530,6 +533,17 @@ export function ProjectSection({
                       >
                         <Kanban className="w-3 h-3" />
                         Sprint Board
+                      </button>
+                    )}
+
+                    {onSelectProjectForDocs && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectProjectForDocs(project.id)}
+                        className="text-xs font-medium text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1"
+                      >
+                        <FileCode className="w-3 h-3" />
+                        Docs &amp; Diagrams
                       </button>
                     )}
                   </div>

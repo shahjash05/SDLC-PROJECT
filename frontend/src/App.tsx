@@ -66,7 +66,15 @@ function StatusBadge({ state, label }: StatusBadgeProps) {
   );
 }
 
-const ROADMAP_PHASES = [
+interface RoadmapPhase {
+  phase: string;
+  name: string;
+  description: string;
+  status: string;
+  statusVariant: 'completed' | 'active' | 'next' | 'planned';
+}
+
+const ROADMAP_PHASES: RoadmapPhase[] = [
   {
     phase: 'Phase 0',
     name: 'Foundation & Infrastructure',
@@ -92,15 +100,15 @@ const ROADMAP_PHASES = [
     phase: 'Phase 3',
     name: 'Requirements & Sprint Planning',
     description: 'User stories, acceptance criteria, backlogs, sprint boards, and task tracking.',
-    status: 'Active (Current)',
-    statusVariant: 'active' as const,
+    status: 'Completed',
+    statusVariant: 'completed' as const,
   },
   {
     phase: 'Phase 4',
     name: 'Documents & Architecture Diagrams',
     description: 'Collaborative technical specifications, Mermaid architecture diagrams, and review workflows.',
-    status: 'Next Up',
-    statusVariant: 'next' as const,
+    status: 'Active (Current)',
+    statusVariant: 'active' as const,
   },
   {
     phase: 'Phase 5',
