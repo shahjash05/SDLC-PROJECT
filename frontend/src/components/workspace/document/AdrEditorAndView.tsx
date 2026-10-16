@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import type {
   DecisionRecordContent,
-  AdrOptionItem,
   DocumentStatus,
 } from '../../../types/entities';
 

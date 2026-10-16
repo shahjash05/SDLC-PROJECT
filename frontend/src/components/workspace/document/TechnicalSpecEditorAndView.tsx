@@ -7,16 +7,12 @@ import {
   Workflow,
   Plus,
   Trash2,
-  ExternalLink,
   BookOpen,
 } from 'lucide-react';
 import type {
   TechnicalSpecContent,
-  TechChoiceItem,
-  ComponentResponsibilityItem,
   DocumentSummary,
 } from '../../../types/entities';
-import { DiagramRenderer } from '../DiagramRenderer';
 
 interface TechSpecProps {
   content: TechnicalSpecContent;

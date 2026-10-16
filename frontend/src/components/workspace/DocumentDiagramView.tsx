@@ -165,7 +165,7 @@ export function DocumentDiagramView({
 
   // Form states for Create
   const [createTitle, setCreateTitle] = useState('');
-  const [createType, setCreateType] = useState<DocumentType>('ARCHITECTURE_DIAGRAM');
+  const [createType, setCreateType] = useState<DocumentType>('PRODUCT_REQUIREMENTS');
   const [createDiagramSyntax, setCreateDiagramSyntax] = useState<DiagramSyntax>('MERMAID');
   const [createContent, setCreateContent] = useState(MERMAID_SAMPLE_TEMPLATE);
   const [createPrdState, setCreatePrdState] = useState<ProductRequirementContent>(defaultPrdContent());
@@ -705,7 +705,7 @@ export function DocumentDiagramView({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">
-                  Create New {formatTypeLabel(createType)}
+                  New Document or Architecture Diagram
                 </h3>
                 <p className="text-xs text-slate-500">
                   Project: {activeProject?.name} ({activeProject?.projectKey})
@@ -744,11 +744,11 @@ export function DocumentDiagramView({
                     }}
                     className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
                   >
-                    <option value="PRODUCT_REQUIREMENTS">PRD / Requirements</option>
+                    <option value="PRODUCT_REQUIREMENTS">PRDs / Requirements</option>
+                    <option value="ARCHITECTURE_DIAGRAM">Architecture Diagram</option>
                     <option value="API_DESIGN">API Design Specification</option>
                     <option value="TECHNICAL_SPEC">Technical Specification</option>
                     <option value="DECISION_RECORD">ADR / Architecture Decision</option>
-                    <option value="ARCHITECTURE_DIAGRAM">Architecture Diagram</option>
                     <option value="GENERAL">General Document</option>
                   </select>
                 </div>
@@ -760,17 +760,7 @@ export function DocumentDiagramView({
                   <input
                     type="text"
                     required
-                    placeholder={
-                      createType === 'PRODUCT_REQUIREMENTS'
-                        ? 'e.g., User Authentication & Session PRD'
-                        : createType === 'API_DESIGN'
-                        ? 'e.g., Workspace Document REST API Spec'
-                        : createType === 'DECISION_RECORD'
-                        ? 'e.g., ADR-002 Stateful vs Stateless Auth'
-                        : createType === 'TECHNICAL_SPEC'
-                        ? 'e.g., Architecture Technical Specification'
-                        : 'e.g., Microservices Communication Architecture'
-                    }
+                    placeholder="e.g., Microservices Communication Architecture"
                     value={createTitle}
                     onChange={(e) => setCreateTitle(e.target.value)}
                     className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
@@ -1079,7 +1069,7 @@ export function DocumentDiagramView({
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g., Updated acceptance criteria and added endpoint query parameters"
+                        placeholder="e.g., Added authentication service edge routing"
                         value={editChangeSummary}
                         onChange={(e) => setEditChangeSummary(e.target.value)}
                         className="w-full text-xs border border-slate-300 rounded px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-400"
@@ -1278,17 +1268,16 @@ export function DocumentDiagramView({
                       </button>
                     </div>
 
-                    {selectedHistoricalVersion.diagramSyntax && selectedHistoricalVersion.diagramSyntax !== 'NONE' ? (
+                    {selectedHistoricalVersion.diagramSyntax && selectedHistoricalVersion.diagramSyntax !== 'NONE' && (
                       <DiagramRenderer
                         syntax={selectedHistoricalVersion.diagramSyntax}
                         content={selectedHistoricalVersion.content}
                         title={selectedHistoricalVersion.title}
                       />
-                    ) : (
-                      <div className="bg-white border border-slate-200 rounded p-3 font-mono text-xs text-slate-800 max-h-56 overflow-y-auto whitespace-pre-wrap">
-                        {selectedHistoricalVersion.content}
-                      </div>
                     )}
+                    <div className="bg-white border border-slate-200 rounded p-3 font-mono text-xs text-slate-800 max-h-56 overflow-y-auto whitespace-pre-wrap">
+                      {selectedHistoricalVersion.content}
+                    </div>
                   </div>
                 )}
               </div>

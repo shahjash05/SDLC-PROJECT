@@ -17,6 +17,16 @@ This is the greenfield implementation of the Collaborative SDLC Management Platf
 
 ---
 
+## Quick Start (Windows)
+
+Simply double-click or run:
+```cmd
+start.bat
+```
+This automatically starts Docker infrastructure, the Spring Boot backend, and the Vite frontend in dedicated terminal windows. To stop everything, run `stop.bat`.
+
+---
+
 ## Setup Instructions
 
 ### 1. Environment Variables
@@ -43,7 +53,7 @@ cd backend
 mvn clean compile
 mvn spring-boot:run
 ```
-The backend will start on `http://localhost:8080`.
+The backend will start on `http://localhost:8081`.
 *(Flyway will automatically create the initial database schema upon startup).*
 
 ### 4. Start the Frontend

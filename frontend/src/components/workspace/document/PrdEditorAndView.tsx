@@ -12,7 +12,6 @@ import {
 import type {
   ProductRequirementContent,
   FunctionalRequirementItem,
-  NonFunctionalRequirementItem,
   StorySummary,
 } from '../../../types/entities';
 

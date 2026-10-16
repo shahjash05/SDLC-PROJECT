@@ -2,8 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
 // Mock getBBox for SVG elements in jsdom
-if (typeof SVGElement !== 'undefined' && !SVGElement.prototype.getBBox) {
-  SVGElement.prototype.getBBox = () => ({
+if (typeof SVGElement !== 'undefined' && !(SVGElement.prototype as any).getBBox) {
+  (SVGElement.prototype as any).getBBox = () => ({
     x: 0,
     y: 0,
     width: 120,

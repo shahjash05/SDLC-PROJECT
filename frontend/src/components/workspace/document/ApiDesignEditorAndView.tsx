@@ -5,16 +5,12 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  Code2,
   AlertCircle,
   ShieldAlert,
 } from 'lucide-react';
 import type {
   ApiDesignContent,
   ApiEndpointItem,
-  ApiParameterItem,
-  ApiResponseItem,
-  ApiErrorCodeItem,
 } from '../../../types/entities';
 
 interface ApiDesignProps {
@@ -179,7 +175,8 @@ export function ApiDesignEditorAndView({ content, onChange, isEditing = false }:
                       <span className="font-mono text-xs font-semibold text-slate-900">
                         {data.basePath}{ep.path.startsWith('/') ? ep.path : `/${ep.path}`}
                       </span>
-                      <span className="text-xs text-slate-500">• {ep.summary}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-xs text-slate-600 font-medium">{ep.summary}</span>
                     </div>
 
                     <div className="flex items-center gap-2 text-slate-400">
