@@ -11,6 +11,7 @@ import {
   Edit2,
   Kanban,
   FileCode,
+  CheckSquare,
 } from 'lucide-react';
 import type {
   OrganizationSummary,
@@ -27,6 +28,7 @@ interface ProjectSectionProps {
   initialTeamId?: string | null;
   onSelectProjectForSprints?: (projectId: string) => void;
   onSelectProjectForDocs?: (projectId: string) => void;
+  onSelectProjectForTesting?: (projectId: string) => void;
 }
 
 function getStatusBadgeClass(status: ProjectStatus): string {
@@ -51,6 +53,7 @@ export function ProjectSection({
   initialTeamId,
   onSelectProjectForSprints,
   onSelectProjectForDocs,
+  onSelectProjectForTesting,
 }: ProjectSectionProps) {
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(initialOrgId || 'ALL');
@@ -544,6 +547,17 @@ export function ProjectSection({
                       >
                         <FileCode className="w-3 h-3" />
                         Docs &amp; Diagrams
+                      </button>
+                    )}
+
+                    {onSelectProjectForTesting && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectProjectForTesting(project.id)}
+                        className="text-xs font-medium text-purple-700 hover:text-purple-800 inline-flex items-center gap-1"
+                      >
+                        <CheckSquare className="w-3 h-3" />
+                        Test Cases
                       </button>
                     )}
                   </div>

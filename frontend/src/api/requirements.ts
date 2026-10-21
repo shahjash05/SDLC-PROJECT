@@ -51,6 +51,8 @@ export async function getStories(
   return handleResponse<StorySummary[]>(res, 'Failed to fetch user stories');
 }
 
+export const getProjectStories = getStories;
+
 export async function getStory(id: string): Promise<StoryDetail> {
   const res = await fetch(`${API_BASE_URL}/stories/${id}`, {
     headers: getAuthHeaders(),

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Scale,
   Plus,
@@ -10,18 +10,30 @@ import {
   History,
   ThumbsUp,
   ThumbsDown,
+  Users,
+  ShieldCheck,
+  ShieldAlert,
+  Calendar,
+  ExternalLink,
+  Unlink,
 } from 'lucide-react';
 import type {
   DecisionRecordContent,
   DocumentStatus,
+  DocumentSummary,
 } from '../../../types/entities';
 
-interface AdrProps {
+export interface AdrProps {
   content: DecisionRecordContent;
   onChange?: (updated: DecisionRecordContent) => void;
   isEditing?: boolean;
   status?: DocumentStatus;
   onStatusChange?: (status: DocumentStatus) => void;
+  availableAdrs?: DocumentSummary[];
+  currentDocumentId?: string;
+  onNavigateToDocument?: (docId: string) => void;
+  userCanDecide?: boolean;
+  validationErrors?: Record<string, string>;
 }
 
 export function defaultDecisionRecordContent(): DecisionRecordContent {
@@ -46,6 +58,10 @@ export function defaultDecisionRecordContent(): DecisionRecordContent {
       positive: [''],
       negative: [''],
     },
+    authors: [],
+    deciders: [],
+    statusDate: new Date().toISOString().slice(0, 10),
+    supersededById: '',
   };
 }
 
@@ -67,6 +83,14 @@ export function parseDecisionRecordContent(rawContent?: string): DecisionRecordC
         positive: parsed.consequences?.positive?.length ? parsed.consequences.positive : [''],
         negative: parsed.consequences?.negative?.length ? parsed.consequences.negative : [''],
       },
+      authors: Array.isArray(parsed.authors)
+        ? parsed.authors.filter(Boolean)
+        : [],
+      deciders: Array.isArray(parsed.deciders)
+        ? parsed.deciders.filter(Boolean)
+        : [],
+      statusDate: parsed.statusDate || '',
+      supersededById: parsed.supersededById || '',
     };
   } catch {
     return {
@@ -76,20 +100,108 @@ export function parseDecisionRecordContent(rawContent?: string): DecisionRecordC
   }
 }
 
+export function validateDecisionRecordContent(
+  content: DecisionRecordContent,
+  status: DocumentStatus = 'PROPOSED',
+  currentDocId?: string
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+
+  if (
+    (status === 'ACCEPTED' || status === 'REJECTED') &&
+    (!content.decision || !content.decision.trim())
+  ) {
+    errors.decision = `A clear decision statement is required when marking an ADR as ${status}.`;
+  }
+
+  if (status === 'SUPERSEDED') {
+    if (!content.supersededById || !content.supersededById.trim()) {
+      errors.supersededById = 'Please select which ADR supersedes this decision record.';
+    } else if (currentDocId && content.supersededById === currentDocId) {
+      errors.supersededById = 'An ADR cannot supersede itself. Please select a different ADR.';
+    }
+  }
+
+  return errors;
+}
+
 export function AdrEditorAndView({
   content,
   onChange,
   isEditing = false,
   status = 'PROPOSED',
   onStatusChange,
+  availableAdrs = [],
+  currentDocumentId,
+  onNavigateToDocument,
+  userCanDecide = true,
+  validationErrors = {},
 }: AdrProps) {
   const [data, setData] = useState<DecisionRecordContent>(content);
+  const [authorsInput, setAuthorsInput] = useState<string>(
+    (content.authors || []).join(', ')
+  );
+  const [decidersInput, setDecidersInput] = useState<string>(
+    (content.deciders || []).join(', ')
+  );
+
+  useEffect(() => {
+    setData(content);
+    setAuthorsInput((content.authors || []).join(', '));
+    setDecidersInput((content.deciders || []).join(', '));
+  }, [content]);
 
   const update = (patch: Partial<DecisionRecordContent>) => {
     const next = { ...data, ...patch };
     setData(next);
     onChange?.(next);
   };
+
+  const handleStatusChangeInternal = (newStatus: DocumentStatus) => {
+    if ((newStatus === 'ACCEPTED' || newStatus === 'REJECTED') && !userCanDecide) {
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const patch: Partial<DecisionRecordContent> = {};
+    if (!data.statusDate) {
+      patch.statusDate = today;
+    }
+    if (newStatus !== 'SUPERSEDED' && data.supersededById) {
+      // Keep or clear? Keeping supersededById or clearing can be optional, but we retain it unless user unlinks
+    }
+    if (Object.keys(patch).length > 0) {
+      update(patch);
+    }
+    onStatusChange?.(newStatus);
+  };
+
+  const handleAuthorsChange = (raw: string) => {
+    setAuthorsInput(raw);
+    const parsed = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    update({ authors: parsed });
+  };
+
+  const handleDecidersChange = (raw: string) => {
+    setDecidersInput(raw);
+    const parsed = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    update({ deciders: parsed });
+  };
+
+  // Filter available ADRs to prevent self-linking
+  const eligibleSupersedingAdrs = availableAdrs.filter(
+    (adr) => !currentDocumentId || adr.id !== currentDocumentId
+  );
+
+  const supersedingAdr = availableAdrs.find(
+    (adr) => adr.id === data.supersededById
+  );
 
   const getAdrStatusBadge = (st: DocumentStatus) => {
     switch (st) {
@@ -127,6 +239,7 @@ export function AdrEditorAndView({
     }
   };
 
+  // VIEW MODE
   if (!isEditing) {
     return (
       <div className="space-y-6">
@@ -135,23 +248,136 @@ export function AdrEditorAndView({
           <div className="flex items-center gap-2">
             <Scale className="w-4 h-4 text-slate-800" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Architecture Decision Record (ADR)
+              Architecture Decision Record (MADR Format)
             </span>
           </div>
           {getAdrStatusBadge(status)}
         </div>
 
-        {/* Context & Problem Statement */}
+        {/* Superseded Notification Banner */}
+        {status === 'SUPERSEDED' && (
+          <div className="rounded-md border p-4 bg-purple-50/70 border-purple-200 text-purple-900">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <History className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-purple-900 mb-1">
+                    Superseded Architecture Decision
+                  </h4>
+                  {supersedingAdr ? (
+                    <p className="text-xs text-purple-800">
+                      This ADR has been superseded by{' '}
+                      <span className="font-semibold text-purple-950">
+                        {supersedingAdr.title}
+                      </span>{' '}
+                      (v{supersedingAdr.currentVersion}, status:{' '}
+                      <span className="font-medium">{supersedingAdr.status}</span>).
+                    </p>
+                  ) : data.supersededById ? (
+                    <div className="text-xs text-amber-800 bg-amber-50/80 border border-amber-200 rounded p-2 mt-1 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>
+                        Linked superseding ADR ID:{' '}
+                        <code className="font-mono">{data.supersededById}</code> (Document
+                        not found or may have been deleted).
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-purple-700 italic">
+                      This ADR is marked SUPERSEDED, but no superseding record has been linked yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {supersedingAdr && onNavigateToDocument && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToDocument(supersedingAdr.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-medium transition-colors shadow-sm flex-shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  View Superseding ADR
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Standard MADR Metadata Section */}
+        <div className="bg-white border border-slate-200 rounded-md p-4">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4 text-slate-600" />
+            MADR Decision Metadata
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            {/* Authors */}
+            <div className="bg-slate-50 border border-slate-100 rounded p-3">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
+                Authors / Contributors
+              </span>
+              {data.authors && data.authors.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {data.authors.map((author, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-200 text-slate-800"
+                    >
+                      {author}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-slate-400 italic">None specified</span>
+              )}
+            </div>
+
+            {/* Deciders */}
+            <div className="bg-slate-50 border border-slate-100 rounded p-3">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1 mb-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                Deciders
+              </span>
+              {data.deciders && data.deciders.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {data.deciders.map((decider, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-800 border border-blue-200"
+                    >
+                      {decider}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-slate-400 italic">None specified</span>
+              )}
+            </div>
+
+            {/* Status Change / Decision Date */}
+            <div className="bg-slate-50 border border-slate-100 rounded p-3">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1 mb-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                Status Date
+              </span>
+              <span className="text-slate-800 font-medium">
+                {data.statusDate ? data.statusDate : 'Not specified'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 1. Context & Background */}
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-            1. Context & Background
+            1. Context &amp; Background
           </h4>
           <p className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
             {data.context || 'No context documented.'}
           </p>
         </div>
 
-        {/* Decision Drivers */}
+        {/* 2. Decision Drivers */}
         <div className="bg-white border border-slate-200 rounded-md p-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
             2. Decision Drivers
@@ -165,7 +391,7 @@ export function AdrEditorAndView({
           </ul>
         </div>
 
-        {/* Options Considered */}
+        {/* 3. Options Considered */}
         <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
           <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
@@ -174,16 +400,23 @@ export function AdrEditorAndView({
           </div>
           <div className="divide-y divide-slate-100 p-2 space-y-2">
             {data.optionsConsidered.map((opt, idx) => (
-              <div key={idx} className="bg-slate-50/60 border border-slate-200 rounded p-3 text-xs space-y-1.5">
+              <div
+                key={idx}
+                className="bg-slate-50/60 border border-slate-200 rounded p-3 text-xs space-y-1.5"
+              >
                 <span className="font-semibold text-slate-900 block">{opt.option}</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
                   <div className="text-emerald-700 flex items-start gap-1">
                     <ThumbsUp className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                    <span><strong>Pros:</strong> {opt.pros || 'None listed'}</span>
+                    <span>
+                      <strong>Pros:</strong> {opt.pros || 'None listed'}
+                    </span>
                   </div>
                   <div className="text-rose-700 flex items-start gap-1">
                     <ThumbsDown className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                    <span><strong>Cons:</strong> {opt.cons || 'None listed'}</span>
+                    <span>
+                      <strong>Cons:</strong> {opt.cons || 'None listed'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -191,10 +424,10 @@ export function AdrEditorAndView({
           </div>
         </div>
 
-        {/* Decision Outcome & Rationale */}
+        {/* 4. Decision Outcome & Rationale */}
         <div className="bg-blue-50/50 border border-blue-200 rounded-md p-4 space-y-2">
           <h4 className="text-xs font-bold uppercase tracking-wider text-blue-900">
-            4. Decision Outcome & Rationale
+            4. Decision Outcome &amp; Rationale
           </h4>
           <div className="text-xs text-slate-900 font-medium">
             <strong>Decision:</strong> {data.decision || 'No formal decision stated yet.'}
@@ -204,7 +437,7 @@ export function AdrEditorAndView({
           </p>
         </div>
 
-        {/* Consequences */}
+        {/* 5. Consequences */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-emerald-50/50 border border-emerald-200 rounded-md p-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-2 flex items-center gap-1.5">
@@ -212,7 +445,9 @@ export function AdrEditorAndView({
             </h4>
             <ul className="list-disc list-inside space-y-1 text-xs text-slate-800">
               {data.consequences.positive.filter(Boolean).length > 0 ? (
-                data.consequences.positive.filter(Boolean).map((p, i) => <li key={i}>{p}</li>)
+                data.consequences.positive.filter(Boolean).map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))
               ) : (
                 <li className="text-slate-400 italic">None specified</li>
               )}
@@ -221,11 +456,14 @@ export function AdrEditorAndView({
 
           <div className="bg-amber-50/50 border border-amber-200 rounded-md p-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-2 flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-700" /> Negative / Trade-off Consequences
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-700" /> Negative / Trade-off
+              Consequences
             </h4>
             <ul className="list-disc list-inside space-y-1 text-xs text-slate-800">
               {data.consequences.negative.filter(Boolean).length > 0 ? (
-                data.consequences.negative.filter(Boolean).map((n, i) => <li key={i}>{n}</li>)
+                data.consequences.negative.filter(Boolean).map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))
               ) : (
                 <li className="text-slate-400 italic">None specified</li>
               )}
@@ -239,44 +477,219 @@ export function AdrEditorAndView({
   // EDIT MODE
   return (
     <div className="space-y-5">
-      {/* Status Picker for ADR */}
-      {onStatusChange && (
-        <div className="bg-slate-50 border border-slate-200 rounded p-3 flex items-center justify-between gap-3">
-          <label className="text-xs font-semibold text-slate-800">
-            ADR Lifecycle Status
-          </label>
-          <select
-            value={status}
-            onChange={(e) => onStatusChange(e.target.value as DocumentStatus)}
-            className="text-xs font-semibold border border-slate-300 rounded px-2.5 py-1.5 bg-white text-slate-900"
-          >
-            <option value="PROPOSED">PROPOSED (Under Review)</option>
-            <option value="ACCEPTED">ACCEPTED (Approved Decision)</option>
-            <option value="REJECTED">REJECTED (Alternative Chosen)</option>
-            <option value="SUPERSEDED">SUPERSEDED (Replaced by Newer ADR)</option>
-            <option value="DEPRECATED">DEPRECATED (Obsolete)</option>
-          </select>
+      {/* Permission Restriction Banner if user cannot decide */}
+      {!userCanDecide && (
+        <div className="bg-amber-50 border border-amber-200 rounded p-3 flex items-start gap-2.5 text-amber-800 text-xs">
+          <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <strong className="block font-semibold text-amber-900">
+              Decision Authorization Restricted
+            </strong>
+            Only Team Leaders (<code>ROLE_TEAM_LEADER</code>), Platform Administrators (
+            <code>ROLE_ADMIN</code>), or Organization Owners/Admins can mark an Architecture
+            Decision Record as <strong>ACCEPTED</strong> or <strong>REJECTED</strong>. You may
+            still propose decisions or mark records as SUPERSEDED or DEPRECATED.
+          </div>
         </div>
       )}
 
-      {/* Context */}
+      {/* Lifecycle Status & Supersession Picker */}
+      {onStatusChange && (
+        <div className="bg-slate-50 border border-slate-200 rounded p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <label
+                htmlFor="adr-lifecycle-status"
+                className="text-xs font-semibold text-slate-800 block"
+              >
+                ADR Lifecycle Status
+              </label>
+              <span className="text-[11px] text-slate-500">
+                MADR lifecycle stage for this architectural decision.
+              </span>
+            </div>
+
+            <select
+              id="adr-lifecycle-status"
+              value={status}
+              onChange={(e) =>
+                handleStatusChangeInternal(e.target.value as DocumentStatus)
+              }
+              className="text-xs font-semibold border border-slate-300 rounded px-2.5 py-1.5 bg-white text-slate-900"
+            >
+              <option value="PROPOSED">PROPOSED (Under Review)</option>
+              <option
+                value="ACCEPTED"
+                disabled={!userCanDecide}
+                className={!userCanDecide ? 'text-slate-400 italic' : ''}
+              >
+                ACCEPTED (Approved Decision){' '}
+                {!userCanDecide ? '— [Team Leader / Admin required]' : ''}
+              </option>
+              <option
+                value="REJECTED"
+                disabled={!userCanDecide}
+                className={!userCanDecide ? 'text-slate-400 italic' : ''}
+              >
+                REJECTED (Alternative Chosen){' '}
+                {!userCanDecide ? '— [Team Leader / Admin required]' : ''}
+              </option>
+              <option value="SUPERSEDED">SUPERSEDED (Replaced by Newer ADR)</option>
+              <option value="DEPRECATED">DEPRECATED (Obsolete)</option>
+            </select>
+          </div>
+
+          {/* Superseded By Selector (When Status is SUPERSEDED) */}
+          {status === 'SUPERSEDED' && (
+            <div className="pt-3 border-t border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="adr-superseded-by"
+                  className="text-xs font-semibold text-purple-900 flex items-center gap-1.5"
+                >
+                  <History className="w-3.5 h-3.5 text-purple-700" />
+                  Superseded By (Linked ADR in this Project) *
+                </label>
+                {data.supersededById && (
+                  <button
+                    type="button"
+                    onClick={() => update({ supersededById: '' })}
+                    className="text-[11px] text-slate-500 hover:text-rose-600 inline-flex items-center gap-1"
+                  >
+                    <Unlink className="w-3 h-3" /> Unlink
+                  </button>
+                )}
+              </div>
+
+              <select
+                id="adr-superseded-by"
+                value={data.supersededById || ''}
+                onChange={(e) => update({ supersededById: e.target.value })}
+                className={`w-full text-xs border rounded px-3 py-1.5 bg-white text-slate-900 ${
+                  validationErrors.supersededById
+                    ? 'border-rose-400 ring-1 ring-rose-200'
+                    : 'border-purple-300'
+                }`}
+              >
+                <option value="">-- Select Superseding ADR --</option>
+                {eligibleSupersedingAdrs.map((adr) => (
+                  <option key={adr.id} value={adr.id}>
+                    {adr.title} (Status: {adr.status}, v{adr.currentVersion})
+                  </option>
+                ))}
+              </select>
+
+              {validationErrors.supersededById && (
+                <p className="text-[11px] text-rose-600 font-medium">
+                  {validationErrors.supersededById}
+                </p>
+              )}
+
+              {/* Graceful fallback if linked ADR is missing from project */}
+              {data.supersededById &&
+                !availableAdrs.some((adr) => adr.id === data.supersededById) && (
+                  <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                      <span>
+                        The previously linked ADR (ID:{' '}
+                        <code className="font-mono">{data.supersededById}</code>) was not
+                        found in this project or has been deleted.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => update({ supersededById: '' })}
+                      className="px-2 py-0.5 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded font-medium text-[10px]"
+                    >
+                      Clear Link
+                    </button>
+                  </div>
+                )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Standard MADR Metadata Editor */}
+      <div className="bg-slate-50 border border-slate-200 rounded p-4 space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+          <Users className="w-3.5 h-3.5 text-slate-600" />
+          MADR Metadata
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Authors */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-800 mb-1">
+              Authors (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={authorsInput}
+              onChange={(e) => handleAuthorsChange(e.target.value)}
+              placeholder="e.g. Alice Developer, Bob Architect"
+              className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 bg-white text-slate-900"
+            />
+          </div>
+
+          {/* Deciders */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-800 mb-1">
+              Deciders (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={decidersInput}
+              onChange={(e) => handleDecidersChange(e.target.value)}
+              placeholder="e.g. Charlie TeamLead, Dana Admin"
+              className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 bg-white text-slate-900"
+            />
+          </div>
+
+          {/* Decision Date */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-800 mb-1">
+              Decision / Status Date
+            </label>
+            <input
+              type="date"
+              value={data.statusDate || ''}
+              onChange={(e) => update({ statusDate: e.target.value })}
+              className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 bg-white text-slate-900"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 1. Context */}
       <div>
         <label className="block text-xs font-semibold text-slate-800 mb-1">
-          1. Context & Architectural Forces *
+          1. Context &amp; Architectural Forces *
         </label>
         <textarea
           rows={3}
           value={data.context}
           onChange={(e) => update({ context: e.target.value })}
           placeholder="Describe the technical or business problem, environmental constraints, and architectural forces..."
-          className="w-full text-xs border border-slate-300 rounded p-2.5 bg-white text-slate-900"
+          className={`w-full text-xs border rounded p-2.5 bg-white text-slate-900 ${
+            validationErrors.context
+              ? 'border-rose-400 ring-1 ring-rose-200'
+              : 'border-slate-300'
+          }`}
         />
+        {validationErrors.context && (
+          <p className="text-[11px] text-rose-600 mt-1 font-medium">
+            {validationErrors.context}
+          </p>
+        )}
       </div>
 
-      {/* Decision Drivers */}
+      {/* 2. Decision Drivers */}
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-xs font-semibold text-slate-800">2. Decision Drivers</label>
+          <label className="text-xs font-semibold text-slate-800">
+            2. Decision Drivers
+          </label>
           <button
             type="button"
             onClick={() => update({ problemDrivers: [...data.problemDrivers, ''] })}
@@ -307,6 +720,7 @@ export function AdrEditorAndView({
                     update({ problemDrivers: next });
                   }}
                   className="text-slate-400 hover:text-rose-600 p-1"
+                  title="Remove Driver"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -316,10 +730,12 @@ export function AdrEditorAndView({
         </div>
       </div>
 
-      {/* Options Considered */}
+      {/* 3. Options Considered */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-semibold text-slate-800">3. Options Considered</label>
+          <label className="text-xs font-semibold text-slate-800">
+            3. Options Considered
+          </label>
           <button
             type="button"
             onClick={() => {
@@ -337,7 +753,10 @@ export function AdrEditorAndView({
         </div>
         <div className="space-y-2.5">
           {data.optionsConsidered.map((opt, idx) => (
-            <div key={idx} className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
+            <div
+              key={idx}
+              className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2"
+            >
               <div className="flex items-center justify-between gap-2">
                 <input
                   type="text"
@@ -358,6 +777,7 @@ export function AdrEditorAndView({
                       update({ optionsConsidered: next });
                     }}
                     className="text-slate-400 hover:text-rose-600 p-1"
+                    title="Remove Option"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -392,7 +812,7 @@ export function AdrEditorAndView({
         </div>
       </div>
 
-      {/* Decision Outcome & Rationale */}
+      {/* 4. Decision Outcome & Rationale */}
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-semibold text-slate-800 mb-1">
@@ -403,13 +823,22 @@ export function AdrEditorAndView({
             value={data.decision}
             onChange={(e) => update({ decision: e.target.value })}
             placeholder="State the agreed decision clearly and concisely..."
-            className="w-full text-xs font-semibold border border-slate-300 rounded px-2.5 py-1.5 bg-white text-slate-900"
+            className={`w-full text-xs font-semibold border rounded px-2.5 py-1.5 bg-white text-slate-900 ${
+              validationErrors.decision
+                ? 'border-rose-400 ring-1 ring-rose-200'
+                : 'border-slate-300'
+            }`}
           />
+          {validationErrors.decision && (
+            <p className="text-[11px] text-rose-600 mt-1 font-medium">
+              {validationErrors.decision}
+            </p>
+          )}
         </div>
 
         <div>
           <label className="block text-xs font-semibold text-slate-800 mb-1">
-            Rationale & Justification
+            Rationale &amp; Justification
           </label>
           <textarea
             rows={2}
@@ -421,11 +850,13 @@ export function AdrEditorAndView({
         </div>
       </div>
 
-      {/* Consequences */}
+      {/* 5. Consequences */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-semibold text-slate-800">Positive Consequences</label>
+            <label className="text-xs font-semibold text-slate-800">
+              Positive Consequences
+            </label>
             <button
               type="button"
               onClick={() =>
@@ -463,6 +894,7 @@ export function AdrEditorAndView({
                       update({ consequences: { ...data.consequences, positive: next } });
                     }}
                     className="text-slate-400 hover:text-rose-600 p-1"
+                    title="Remove outcome"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -474,7 +906,9 @@ export function AdrEditorAndView({
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-semibold text-slate-800">Trade-offs & Negative Consequences</label>
+            <label className="text-xs font-semibold text-slate-800">
+              Trade-offs &amp; Negative Consequences
+            </label>
             <button
               type="button"
               onClick={() =>
@@ -512,6 +946,7 @@ export function AdrEditorAndView({
                       update({ consequences: { ...data.consequences, negative: next } });
                     }}
                     className="text-slate-400 hover:text-rose-600 p-1"
+                    title="Remove trade-off"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

@@ -429,4 +429,94 @@ class DocumentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("ACCEPTED"));
     }
+
+    @Test
+    void restrictAcceptingOrRejectingAdrsToTeamLeadersAdminsOrOrgOwners() throws Exception {
+        // Create an ADR
+        String adrContent = """
+            {
+                "context": "Microservices service-to-service communication framework",
+                "problemDrivers": ["Low latency", "Strong typing"],
+                "optionsConsidered": [{"option": "gRPC", "pros": "Binary", "cons": "Protobuf overhead"}],
+                "decision": "Use gRPC for synchronous internal communication",
+                "rationale": "High throughput and code generation",
+                "consequences": {"positive": ["Low payload size"], "negative": ["Requires HTTP/2"]}
+            }
+            """;
+
+        CreateDocumentRequest createReq = new CreateDocumentRequest(
+                "ADR-002 Internal RPC Protocol",
+                DocumentType.DECISION_RECORD,
+                adrContent,
+                null
+        );
+
+        String createRes = mockMvc.perform(post("/api/v1/projects/" + testProject.getId() + "/documents")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String adrId = objectMapper.readTree(createRes).get("data").get("id").asText();
+
+        // Create a regular developer user (Org Member role MEMBER, application role ROLE_DEVELOPER)
+        Role devRole = roleRepository.findByName(RoleName.ROLE_DEVELOPER).orElseThrow();
+        User regularDev = new User("dev_user@test.com", "dev_user", "pass", "Dev User");
+        regularDev.addRole(devRole);
+        regularDev = userRepository.save(regularDev);
+        organizationMemberRepository.save(new OrganizationMember(testOrg, regularDev, OrgMemberRole.MEMBER));
+        String regularDevToken = jwtTokenProvider.generateToken(regularDev);
+
+        // 1. Regular dev can update ADR to PROPOSED or SUPERSEDED
+        mockMvc.perform(patch("/api/v1/documents/" + adrId + "/status")
+                        .header("Authorization", "Bearer " + regularDevToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateDocumentStatusRequest(DocumentStatus.PROPOSED))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PROPOSED"));
+
+        // 2. Regular dev is FORBIDDEN from transitioning ADR to ACCEPTED
+        mockMvc.perform(patch("/api/v1/documents/" + adrId + "/status")
+                        .header("Authorization", "Bearer " + regularDevToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateDocumentStatusRequest(DocumentStatus.ACCEPTED))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("Only team leaders, admins, or organization owners/admins can accept or reject Architecture Decision Records.")));
+
+        // 3. Regular dev is FORBIDDEN from transitioning ADR to REJECTED
+        mockMvc.perform(patch("/api/v1/documents/" + adrId + "/status")
+                        .header("Authorization", "Bearer " + regularDevToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateDocumentStatusRequest(DocumentStatus.REJECTED))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value(containsString("Only team leaders, admins, or organization owners/admins can accept or reject Architecture Decision Records.")));
+
+        // 4. Create a team leader user with ROLE_TEAM_LEADER
+        Role leaderRole = roleRepository.findByName(RoleName.ROLE_TEAM_LEADER)
+                .orElseGet(() -> roleRepository.save(new Role(RoleName.ROLE_TEAM_LEADER, "Team Leader")));
+        User teamLeader = new User("leader_user@test.com", "leader_user", "pass", "Team Leader");
+        teamLeader.addRole(leaderRole);
+        teamLeader = userRepository.save(teamLeader);
+        organizationMemberRepository.save(new OrganizationMember(testOrg, teamLeader, OrgMemberRole.MEMBER));
+        String leaderToken = jwtTokenProvider.generateToken(teamLeader);
+
+        // Team leader can ACCEPT the ADR
+        mockMvc.perform(patch("/api/v1/documents/" + adrId + "/status")
+                        .header("Authorization", "Bearer " + leaderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateDocumentStatusRequest(DocumentStatus.ACCEPTED))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACCEPTED"));
+
+        // Team leader can REJECT the ADR
+        mockMvc.perform(patch("/api/v1/documents/" + adrId + "/status")
+                        .header("Authorization", "Bearer " + leaderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateDocumentStatusRequest(DocumentStatus.REJECTED))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+    }
 }

@@ -34,7 +34,7 @@ class PostgresFlywayMigrationTest {
 
         MigrationInfo[] appliedMigrations = flyway.info().applied();
 
-        assertTrue(appliedMigrations.length >= 5, "Expected at least V1, V2, V3, V4, and V5 migrations to be applied");
+        assertTrue(appliedMigrations.length >= 9, "Expected at least V1 through V9 migrations to be applied");
 
         MigrationInfo v1 = appliedMigrations[0];
         assertEquals("1", v1.getVersion().getVersion());
@@ -60,5 +60,25 @@ class PostgresFlywayMigrationTest {
         assertEquals("5", v5.getVersion().getVersion());
         assertEquals("documents and diagrams schema", v5.getDescription());
         assertEquals(MigrationState.SUCCESS, v5.getState());
+
+        MigrationInfo v6 = appliedMigrations[5];
+        assertEquals("6", v6.getVersion().getVersion());
+        assertEquals("test management schema", v6.getDescription());
+        assertEquals(MigrationState.SUCCESS, v6.getState());
+
+        MigrationInfo v7 = appliedMigrations[6];
+        assertEquals("7", v7.getVersion().getVersion());
+        assertEquals("test execution schema", v7.getDescription());
+        assertEquals(MigrationState.SUCCESS, v7.getState());
+
+        MigrationInfo v8 = appliedMigrations[7];
+        assertEquals("8", v8.getVersion().getVersion());
+        assertEquals("defect tracking schema", v8.getDescription());
+        assertEquals(MigrationState.SUCCESS, v8.getState());
+
+        MigrationInfo v9 = appliedMigrations[8];
+        assertEquals("9", v9.getVersion().getVersion());
+        assertEquals("test case traceability schema", v9.getDescription());
+        assertEquals(MigrationState.SUCCESS, v9.getState());
     }
 }

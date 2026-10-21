@@ -209,6 +209,8 @@ export interface StorySummary {
   createdAt: string;
 }
 
+export type UserStory = StorySummary;
+
 export interface StoryDetail extends StorySummary {
   projectName: string;
   description?: string;
@@ -389,6 +391,10 @@ export interface DecisionRecordContent {
     positive: string[];
     negative: string[];
   };
+  authors?: string[];
+  deciders?: string[];
+  statusDate?: string;
+  supersededById?: string;
 }
 
 export interface DocumentSummary {
@@ -443,5 +449,308 @@ export interface UpdateDocumentStatusPayload {
   status: DocumentStatus;
 }
 
+// ==========================================
+// Phase 5: Testing & QA Management Entities
+// ==========================================
+
+export type TestPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type TestCaseStatus =
+  | 'DRAFT'
+  | 'ACTIVE'
+  | 'PASSED'
+  | 'FAILED'
+  | 'BLOCKED'
+  | 'SKIPPED'
+  | 'DEPRECATED';
+
+export interface TestSuite {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  testCaseCount: number;
+  createdByUsername?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TestCaseSummary {
+  id: string;
+  projectId: string;
+  projectKey: string;
+  suiteId?: string | null;
+  suiteName?: string | null;
+  caseNumber: number;
+  caseKey: string;
+  title: string;
+  priority: TestPriority;
+  status: TestCaseStatus;
+  createdByUsername?: string;
+  createdAt: string;
+  updatedAt: string;
+  userStoryId?: string | null;
+  userStoryKey?: string | null;
+  userStoryTitle?: string | null;
+  requirementId?: string | null;
+  requirementTitle?: string | null;
+}
+
+export interface TestCaseDetail extends TestCaseSummary {
+  projectName: string;
+  description?: string;
+  preconditions?: string;
+  testSteps?: string;
+  expectedResult?: string;
+}
+
+export interface CreateTestSuitePayload {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateTestSuitePayload {
+  name: string;
+  description?: string;
+}
+
+export interface CreateTestCasePayload {
+  title: string;
+  description?: string;
+  preconditions?: string;
+  testSteps?: string;
+  expectedResult?: string;
+  priority?: TestPriority;
+  status?: TestCaseStatus;
+  suiteId?: string | null;
+  userStoryId?: string | null;
+  requirementId?: string | null;
+}
+
+export interface UpdateTestCasePayload {
+  title: string;
+  description?: string;
+  preconditions?: string;
+  testSteps?: string;
+  expectedResult?: string;
+  priority?: TestPriority;
+  status?: TestCaseStatus;
+  suiteId?: string | null;
+  userStoryId?: string | null;
+  requirementId?: string | null;
+}
+
+export interface LinkTestCasePayload {
+  userStoryId?: string | null;
+  requirementId?: string | null;
+}
+
+export interface UpdateTestCaseStatusPayload {
+  status: TestCaseStatus;
+}
+
+// ============================================================================
+// Phase 5, Step 2: Test Execution Models
+// ============================================================================
+
+export type TestExecutionStatus = 'PASSED' | 'FAILED' | 'BLOCKED' | 'SKIPPED';
+
+export interface TestExecution {
+  id: string;
+  testCaseId: string;
+  testCaseKey: string;
+  testCaseTitle: string;
+  projectId: string;
+  status: TestExecutionStatus;
+  actualResult: string;
+  notes?: string | null;
+  durationMs?: number | null;
+  executedByUsername?: string | null;
+  executedAt: string;
+}
+
+export interface ExecuteTestCasePayload {
+  status: TestExecutionStatus;
+  actualResult: string;
+  notes?: string | null;
+  durationMs?: number | null;
+}
+
+export interface ProjectExecutionSummary {
+  projectId: string;
+  totalExecutions: number;
+  passedExecutions: number;
+  failedExecutions: number;
+  blockedExecutions: number;
+  skippedExecutions: number;
+  passRate: number;
+  recentExecutions: TestExecution[];
+}
+
+// ============================================================================
+// Phase 5, Step 3: Defect Tracking & Bug Management Models
+// ============================================================================
+
+export type DefectSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type DefectStatus = 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
+
+export interface DefectSummary {
+  id: string;
+  projectId: string;
+  projectKey: string;
+  defectNumber: number;
+  defectKey: string;
+  title: string;
+  severity: DefectSeverity;
+  priority: TestPriority;
+  status: DefectStatus;
+  assigneeId?: string | null;
+  assigneeUsername?: string | null;
+  assigneeFullName?: string | null;
+  reporterUsername?: string | null;
+  testCaseId?: string | null;
+  testCaseKey?: string | null;
+  testCaseTitle?: string | null;
+  testExecutionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
+}
+
+export interface DefectDetail {
+  id: string;
+  projectId: string;
+  projectName: string;
+  projectKey: string;
+  defectNumber: number;
+  defectKey: string;
+  title: string;
+  description?: string | null;
+  stepsToReproduce?: string | null;
+  expectedResult?: string | null;
+  actualResult?: string | null;
+  severity: DefectSeverity;
+  priority: TestPriority;
+  status: DefectStatus;
+  assigneeId?: string | null;
+  assigneeUsername?: string | null;
+  assigneeFullName?: string | null;
+  reporterId?: string | null;
+  reporterUsername?: string | null;
+  reporterFullName?: string | null;
+  testCaseId?: string | null;
+  testCaseKey?: string | null;
+  testCaseTitle?: string | null;
+  testExecutionId?: string | null;
+  testExecutionStatus?: TestExecutionStatus | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
+}
+
+export interface CreateDefectPayload {
+  title: string;
+  description?: string;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  severity?: DefectSeverity;
+  priority?: TestPriority;
+  status?: DefectStatus;
+  assigneeId?: string | null;
+  testCaseId?: string | null;
+  testExecutionId?: string | null;
+}
+
+export interface UpdateDefectPayload {
+  title: string;
+  description?: string;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  severity?: DefectSeverity;
+  priority?: TestPriority;
+  status?: DefectStatus;
+  assigneeId?: string | null;
+  testCaseId?: string | null;
+  testExecutionId?: string | null;
+}
+
+export interface ProjectDefectSummary {
+  totalDefects: number;
+  openDefects: number;
+  inProgressDefects: number;
+  inReviewDefects: number;
+  resolvedDefects: number;
+  closedDefects: number;
+  reopenedDefects: number;
+  criticalDefects: number;
+  highDefects: number;
+  recentDefects: DefectSummary[];
+}
+
+// ============================================================================
+// Phase 5, Step 4: Requirements & Testing Traceability Models
+// ============================================================================
+
+export interface TraceabilityTestCase {
+  id: string;
+  caseNumber: number;
+  caseKey: string;
+  title: string;
+  priority: TestPriority;
+  status: TestCaseStatus;
+  latestExecutionStatus?: TestExecutionStatus | null;
+  latestExecutionDate?: string | null;
+  latestExecutionDurationMs?: number | null;
+  latestExecutionNotes?: string | null;
+  defects: DefectSummary[];
+}
+
+export interface TraceabilityItem {
+  id: string;
+  key: string;
+  title: string;
+  type: 'USER_STORY' | 'PRODUCT_REQUIREMENTS' | string;
+  status: string;
+  priority: string;
+  testCases: TraceabilityTestCase[];
+  hasCoverage: boolean;
+}
+
+export interface UnlinkedTestCase {
+  id: string;
+  caseNumber: number;
+  caseKey: string;
+  title: string;
+  priority: TestPriority;
+  status: TestCaseStatus;
+  latestExecutionStatus?: TestExecutionStatus | null;
+  latestExecutionDate?: string | null;
+  defects: DefectSummary[];
+}
+
+export interface TraceabilitySummary {
+  totalRequirements: number;
+  coveredRequirements: number;
+  uncoveredRequirements: number;
+  coveragePercentage: number;
+  totalTestCases: number;
+  executedTestCases: number;
+  neverExecutedTestCases: number;
+  executionPercentage: number;
+  totalDefects: number;
+  openDefects: number;
+}
+
+export interface ProjectTraceabilityMatrix {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  summary: TraceabilitySummary;
+  items: TraceabilityItem[];
+  unlinkedTestCases: UnlinkedTestCase[];
+}
 
 

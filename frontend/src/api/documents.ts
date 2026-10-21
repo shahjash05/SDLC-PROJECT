@@ -45,6 +45,8 @@ export async function getDocumentsForProject(
   return handleResponse<DocumentSummary[]>(res, 'Failed to fetch documents');
 }
 
+export const getProjectDocuments = getDocumentsForProject;
+
 export async function getDocumentById(documentId: string): Promise<DocumentDetail> {
   const res = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
     headers: getAuthHeaders(),

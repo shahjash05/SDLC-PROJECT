@@ -7,6 +7,7 @@ import com.sdlc.platform.common.ResourceNotFoundException;
 import com.sdlc.platform.document.dto.*;
 import com.sdlc.platform.document.model.DiagramSyntax;
 import com.sdlc.platform.document.model.Document;
+import com.sdlc.platform.document.model.DocumentStatus;
 import com.sdlc.platform.document.model.DocumentType;
 import com.sdlc.platform.document.model.DocumentVersion;
 import com.sdlc.platform.document.repository.DocumentRepository;
@@ -139,6 +140,7 @@ public class DocumentService {
             document.setDiagramSyntax(request.diagramSyntax());
         }
         if (request.status() != null) {
+            checkAdrDecisionPermission(document, request.status(), currentUser);
             document.setStatus(request.status());
         }
 
@@ -169,7 +171,10 @@ public class DocumentService {
 
         organizationService.checkMembershipOrAdmin(document.getProject().getOrganization().getId(), currentUser);
 
-        document.setStatus(request.status());
+        if (request.status() != null) {
+            checkAdrDecisionPermission(document, request.status(), currentUser);
+            document.setStatus(request.status());
+        }
         Document updated = documentRepository.save(document);
         return toSummaryDto(updated);
     }
@@ -233,6 +238,46 @@ public class DocumentService {
         }
 
         throw new AccessDeniedException("You do not have permission to delete this document.");
+    }
+
+    private void checkAdrDecisionPermission(Document document, DocumentStatus newStatus, UserPrincipal currentUser) {
+        if (document.getType() != DocumentType.DECISION_RECORD) {
+            return;
+        }
+        if (newStatus != DocumentStatus.ACCEPTED && newStatus != DocumentStatus.REJECTED) {
+            return;
+        }
+        if (document.getStatus() == newStatus) {
+            return;
+        }
+
+        boolean isSystemAdmin = currentUser.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        if (isSystemAdmin) {
+            return;
+        }
+
+        boolean isTeamLeader = currentUser.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TEAM_LEADER"));
+        if (isTeamLeader) {
+            return;
+        }
+
+        OrgMemberRole orgRole = organizationMemberRepository
+                .findByOrganizationIdAndUserId(document.getProject().getOrganization().getId(), currentUser.getId())
+                .map(com.sdlc.platform.organization.model.OrganizationMember::getRole)
+                .orElse(null);
+
+        if (orgRole == OrgMemberRole.OWNER || orgRole == OrgMemberRole.ADMIN) {
+            return;
+        }
+
+        if (document.getProject().getTeam() != null && document.getProject().getTeam().getLeader() != null
+                && document.getProject().getTeam().getLeader().getId().equals(currentUser.getId())) {
+            return;
+        }
+
+        throw new AccessDeniedException("Only team leaders, admins, or organization owners/admins can accept or reject Architecture Decision Records.");
     }
 
     private DocumentSummaryDto toSummaryDto(Document document) {

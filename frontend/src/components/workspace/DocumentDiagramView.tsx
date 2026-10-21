@@ -52,27 +52,34 @@ import {
   PrdEditorAndView,
   parsePrdContent,
   defaultPrdContent,
+  validatePrdContent,
 } from './document/PrdEditorAndView';
 import {
   ApiDesignEditorAndView,
   parseApiDesignContent,
   defaultApiDesignContent,
+  validateApiDesignContent,
 } from './document/ApiDesignEditorAndView';
 import {
   TechnicalSpecEditorAndView,
   parseTechnicalSpecContent,
   defaultTechnicalSpecContent,
+  validateTechnicalSpecContent,
 } from './document/TechnicalSpecEditorAndView';
 import {
   AdrEditorAndView,
   parseDecisionRecordContent,
   defaultDecisionRecordContent,
+  validateDecisionRecordContent,
 } from './document/AdrEditorAndView';
+import { useOptionalAuth } from '../../context/AuthContext';
 
 interface DocumentDiagramViewProps {
   projects?: ProjectSummary[];
   selectedProjectId?: string | null;
   onSelectProject?: (id: string) => void;
+  currentUserRoles?: string[];
+  isOrgOwnerOrAdmin?: boolean;
 }
 
 export const MERMAID_SAMPLE_TEMPLATE = `graph TD
@@ -108,7 +115,16 @@ export function DocumentDiagramView({
   projects: propProjects,
   selectedProjectId,
   onSelectProject,
+  currentUserRoles,
+  isOrgOwnerOrAdmin,
 }: DocumentDiagramViewProps) {
+  const auth = useOptionalAuth();
+  const userRoles = currentUserRoles !== undefined ? currentUserRoles : auth?.user?.roles;
+  const userCanDecideAdr =
+    isOrgOwnerOrAdmin === true ||
+    (userRoles !== undefined
+      ? userRoles.includes('ROLE_ADMIN') || userRoles.includes('ROLE_TEAM_LEADER')
+      : true);
   const [internalProjects, setInternalProjects] = useState<ProjectSummary[]>(propProjects || []);
   const [activeProjectId, setActiveProjectId] = useState<string>(
     selectedProjectId || propProjects?.[0]?.id || ''
@@ -304,6 +320,38 @@ export function DocumentDiagramView({
       return;
     }
 
+    if (createType === 'PRODUCT_REQUIREMENTS') {
+      const validation = validatePrdContent(createPrdState);
+      if (!validation.isValid) {
+        setCreateError(validation.errorMessage || 'Invalid Product Requirements content.');
+        return;
+      }
+    }
+
+    if (createType === 'API_DESIGN') {
+      const validation = validateApiDesignContent(createApiState);
+      if (!validation.isValid) {
+        setCreateError(validation.errorMessage || 'Invalid API Design specification.');
+        return;
+      }
+    }
+
+    if (createType === 'TECHNICAL_SPEC') {
+      const validation = validateTechnicalSpecContent(createTechState);
+      if (!validation.isValid) {
+        setCreateError(validation.errorMessage || 'Invalid Technical Specification.');
+        return;
+      }
+    }
+
+    if (createType === 'DECISION_RECORD') {
+      const adrErrors = validateDecisionRecordContent(createAdrState, createAdrStatus);
+      if (Object.keys(adrErrors).length > 0) {
+        setCreateError(Object.values(adrErrors)[0]);
+        return;
+      }
+    }
+
     setSubmittingCreate(true);
     setCreateError(null);
     try {
@@ -344,6 +392,48 @@ export function DocumentDiagramView({
     if (!activeDocDetail || !editTitle.trim()) {
       setEditError('Document title is required');
       return;
+    }
+
+    if (editType === 'PRODUCT_REQUIREMENTS') {
+      const validation = validatePrdContent(editPrdState);
+      if (!validation.isValid) {
+        setEditError(validation.errorMessage || 'Invalid Product Requirements content.');
+        return;
+      }
+    }
+
+    if (editType === 'API_DESIGN') {
+      const validation = validateApiDesignContent(editApiState);
+      if (!validation.isValid) {
+        setEditError(validation.errorMessage || 'Invalid API Design specification.');
+        return;
+      }
+    }
+
+    if (editType === 'TECHNICAL_SPEC') {
+      const validation = validateTechnicalSpecContent(editTechState);
+      if (!validation.isValid) {
+        setEditError(validation.errorMessage || 'Invalid Technical Specification.');
+        return;
+      }
+    }
+
+    if (editType === 'DECISION_RECORD') {
+      if ((editStatus === 'ACCEPTED' || editStatus === 'REJECTED') && !userCanDecideAdr) {
+        setEditError(
+          'Only team leaders, admins, or organization owners/admins can accept or reject Architecture Decision Records.'
+        );
+        return;
+      }
+      const adrErrors = validateDecisionRecordContent(
+        editAdrState,
+        editStatus,
+        activeDocDetail.id
+      );
+      if (Object.keys(adrErrors).length > 0) {
+        setEditError(Object.values(adrErrors)[0]);
+        return;
+      }
     }
 
     setSubmittingEdit(true);
@@ -478,9 +568,10 @@ export function DocumentDiagramView({
     }
   };
 
-  // Filter linked documents for technical specs
+  // Filter linked documents for technical specs and ADR supersession
   const projectDiagrams = documents.filter((d) => d.type === 'ARCHITECTURE_DIAGRAM');
   const projectRequirements = documents.filter((d) => d.type === 'PRODUCT_REQUIREMENTS');
+  const projectAdrs = documents.filter((d) => d.type === 'DECISION_RECORD');
 
   return (
     <div className="space-y-6">
@@ -784,6 +875,7 @@ export function DocumentDiagramView({
                     content={createApiState}
                     onChange={setCreateApiState}
                     isEditing={true}
+                    documentStatus="DRAFT"
                   />
                 )}
 
@@ -794,6 +886,7 @@ export function DocumentDiagramView({
                     isEditing={true}
                     availableDiagrams={projectDiagrams}
                     availableRequirements={projectRequirements}
+                    onNavigateToDocument={handleOpenDetail}
                   />
                 )}
 
@@ -804,6 +897,8 @@ export function DocumentDiagramView({
                     isEditing={true}
                     status={createAdrStatus}
                     onStatusChange={setCreateAdrStatus}
+                    availableAdrs={projectAdrs}
+                    userCanDecide={userCanDecideAdr}
                   />
                 )}
 
@@ -934,6 +1029,8 @@ export function DocumentDiagramView({
                       type="button"
                       onClick={() => setShowDetailModal(false)}
                       className="text-slate-400 hover:text-slate-600 p-1"
+                      title="Close"
+                      aria-label="Close"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -989,6 +1086,7 @@ export function DocumentDiagramView({
                       <ApiDesignEditorAndView
                         content={parseApiDesignContent(activeDocDetail.content)}
                         isEditing={false}
+                        documentStatus={activeDocDetail.status}
                       />
                     )}
 
@@ -998,6 +1096,7 @@ export function DocumentDiagramView({
                         isEditing={false}
                         availableDiagrams={projectDiagrams}
                         availableRequirements={projectRequirements}
+                        onNavigateToDocument={handleOpenDetail}
                       />
                     )}
 
@@ -1006,6 +1105,10 @@ export function DocumentDiagramView({
                         content={parseDecisionRecordContent(activeDocDetail.content)}
                         status={activeDocDetail.status}
                         isEditing={false}
+                        availableAdrs={projectAdrs}
+                        currentDocumentId={activeDocDetail.id}
+                        onNavigateToDocument={handleOpenDetail}
+                        userCanDecide={userCanDecideAdr}
                       />
                     )}
 
@@ -1040,7 +1143,7 @@ export function DocumentDiagramView({
 
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Review / Approval Status
+                          Review / Approval Status (Governance)
                         </label>
                         <select
                           value={editStatus}
@@ -1054,12 +1157,25 @@ export function DocumentDiagramView({
                           {editType === 'DECISION_RECORD' && (
                             <>
                               <option value="PROPOSED">Proposed</option>
-                              <option value="ACCEPTED">Accepted</option>
-                              <option value="REJECTED">Rejected</option>
+                              <option
+                                value="ACCEPTED"
+                                disabled={!userCanDecideAdr}
+                              >
+                                Accepted {!userCanDecideAdr ? '— [Team Leader / Admin required]' : ''}
+                              </option>
+                              <option
+                                value="REJECTED"
+                                disabled={!userCanDecideAdr}
+                              >
+                                Rejected {!userCanDecideAdr ? '— [Team Leader / Admin required]' : ''}
+                              </option>
                               <option value="SUPERSEDED">Superseded</option>
                             </>
                           )}
                         </select>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Document artifact review status. Separate from individual content lifecycle statuses (such as API contract lifecycle).
+                        </p>
                       </div>
                     </div>
 
@@ -1092,6 +1208,7 @@ export function DocumentDiagramView({
                           content={editApiState}
                           onChange={setEditApiState}
                           isEditing={true}
+                          documentStatus={editStatus}
                         />
                       )}
 
@@ -1102,6 +1219,7 @@ export function DocumentDiagramView({
                           isEditing={true}
                           availableDiagrams={projectDiagrams}
                           availableRequirements={projectRequirements}
+                          onNavigateToDocument={handleOpenDetail}
                         />
                       )}
 
@@ -1112,6 +1230,10 @@ export function DocumentDiagramView({
                           status={editStatus}
                           onStatusChange={setEditStatus}
                           isEditing={true}
+                          availableAdrs={projectAdrs}
+                          currentDocumentId={activeDocDetail?.id}
+                          onNavigateToDocument={handleOpenDetail}
+                          userCanDecide={userCanDecideAdr}
                         />
                       )}
 

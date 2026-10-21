@@ -10,12 +10,14 @@ import {
   FolderGit2,
   Kanban,
   FileCode,
+  CheckSquare,
 } from 'lucide-react';
 import { OrganizationSection } from './OrganizationSection';
 import { TeamSection } from './TeamSection';
 import { ProjectSection } from './ProjectSection';
 import { SprintBoardView } from './SprintBoardView';
 import { DocumentDiagramView } from './DocumentDiagramView';
+import { TestCaseManagementView } from './TestCaseManagementView';
 
 function formatRoleName(role: string): string {
   switch (role) {
@@ -36,12 +38,13 @@ function formatRoleName(role: string): string {
 
 export function WorkspaceView() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'organizations' | 'teams' | 'projects' | 'sprints' | 'documents' | 'profile'>('organizations');
+  const [activeTab, setActiveTab] = useState<'organizations' | 'teams' | 'projects' | 'sprints' | 'documents' | 'testing' | 'profile'>('organizations');
   const [selectedOrgIdForTeams, setSelectedOrgIdForTeams] = useState<string | null>(null);
   const [selectedOrgIdForProjects, setSelectedOrgIdForProjects] = useState<string | null>(null);
   const [selectedTeamIdForProjects, setSelectedTeamIdForProjects] = useState<string | null>(null);
   const [selectedProjectIdForSprints, setSelectedProjectIdForSprints] = useState<string | null>(null);
   const [selectedProjectIdForDocs, setSelectedProjectIdForDocs] = useState<string | null>(null);
+  const [selectedProjectIdForTesting, setSelectedProjectIdForTesting] = useState<string | null>(null);
 
   if (!user) {
     return null;
@@ -72,6 +75,11 @@ export function WorkspaceView() {
   const navigateToDocsFromProject = (projectId: string) => {
     setSelectedProjectIdForDocs(projectId);
     setActiveTab('documents');
+  };
+
+  const navigateToTestingFromProject = (projectId: string) => {
+    setSelectedProjectIdForTesting(projectId);
+    setActiveTab('testing');
   };
 
   return (
@@ -190,6 +198,19 @@ export function WorkspaceView() {
 
         <button
           type="button"
+          onClick={() => setActiveTab('testing')}
+          className={`pb-2.5 px-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            activeTab === 'testing'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <CheckSquare className="w-4 h-4" />
+          Testing &amp; QA
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('profile')}
           className={`pb-2.5 px-1 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ml-auto ${
             activeTab === 'profile'
@@ -223,6 +244,7 @@ export function WorkspaceView() {
           initialTeamId={selectedTeamIdForProjects}
           onSelectProjectForSprints={navigateToSprintsFromProject}
           onSelectProjectForDocs={navigateToDocsFromProject}
+          onSelectProjectForTesting={navigateToTestingFromProject}
         />
       )}
 
@@ -232,6 +254,10 @@ export function WorkspaceView() {
 
       {activeTab === 'documents' && (
         <DocumentDiagramView selectedProjectId={selectedProjectIdForDocs} />
+      )}
+
+      {activeTab === 'testing' && (
+        <TestCaseManagementView selectedProjectId={selectedProjectIdForTesting} />
       )}
 
       {activeTab === 'profile' && (

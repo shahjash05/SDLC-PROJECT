@@ -1,0 +1,40 @@
+package com.sdlc.platform.testing.dto;
+
+import com.sdlc.platform.testing.model.DefectSeverity;
+import com.sdlc.platform.testing.model.DefectStatus;
+import com.sdlc.platform.testing.model.TestExecutionStatus;
+import com.sdlc.platform.testing.model.TestPriority;
+import java.time.Instant;
+import java.util.UUID;
+
+public record DefectDetailDto(
+        UUID id,
+        UUID projectId,
+        String projectName,
+        String projectKey,
+        int defectNumber,
+        String defectKey,
+        String title,
+        String description,
+        String stepsToReproduce,
+        String expectedResult,
+        String actualResult,
+        DefectSeverity severity,
+        TestPriority priority,
+        DefectStatus status,
+        UUID assigneeId,
+        String assigneeUsername,
+        String assigneeFullName,
+        UUID reporterId,
+        String reporterUsername,
+        String reporterFullName,
+        UUID testCaseId,
+        String testCaseKey,
+        String testCaseTitle,
+        UUID testExecutionId,
+        TestExecutionStatus testExecutionStatus,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant resolvedAt,
+        Instant closedAt
+) {}
