@@ -206,7 +206,7 @@ describe('App & Authentication Flow', () => {
     });
   });
 
-  it('preserves system health diagnostics and Phase 0 monitoring', async () => {
+  it('preserves system health diagnostics and runtime service monitoring', async () => {
     render(<App />);
 
     // Switch to System Health tab
@@ -215,9 +215,11 @@ describe('App & Authentication Flow', () => {
 
     expect(screen.getByText('System Diagnostics & Health Monitoring')).toBeInTheDocument();
     expect(screen.getByText('Runtime Services')).toBeInTheDocument();
-    expect(screen.getByText('Implementation Roadmap')).toBeInTheDocument();
-    expect(screen.getByText('Phase 0:')).toBeInTheDocument();
-    expect(screen.getByText('Phase 1:')).toBeInTheDocument();
+    expect(screen.getByText('Backend API')).toBeInTheDocument();
+    expect(screen.getByText('Spring Boot 3.4.1')).toBeInTheDocument();
+    expect(screen.getByText('Database')).toBeInTheDocument();
+    expect(screen.getByText('Frontend Client')).toBeInTheDocument();
+    expect(screen.getByText('Java Runtime')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText('Backend: Connected')).toBeInTheDocument();

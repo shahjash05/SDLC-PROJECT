@@ -18,6 +18,7 @@ import type {
   UserStory,
   DocumentSummary,
   ProjectTraceabilityMatrix,
+  ReleaseReadinessSummary,
 } from './types/entities';
 
 describe('Phase 5: Test Case Management Components', () => {
@@ -364,6 +365,158 @@ describe('Phase 5: Test Case Management Components', () => {
     recentDefects: mockDefects,
   };
 
+  const mockReleaseReadinessBlocked: ReleaseReadinessSummary = {
+    projectId: 'proj-1',
+    projectKey: 'TEST',
+    projectName: 'SDLC Platform Testing',
+    status: 'BLOCKED',
+    isReady: false,
+    summary: 'Release is BLOCKED by 1 critical issue(s). Resolve all blockers before release.',
+    blockers: ['Zero unresolved critical defects: 1 critical defect found'],
+    warnings: ['Requirement coverage is 66.7%: 1 requirement or story uncovered'],
+    testStats: {
+      totalTests: 3,
+      executedTests: 2,
+      neverExecutedTests: 1,
+      passedTests: 1,
+      failedTests: 1,
+      blockedTests: 0,
+      skippedTests: 0,
+      totalExecutions: 4,
+      passRate: 50.0,
+    },
+    defectStats: {
+      totalDefects: 2,
+      unresolvedTotal: 1,
+      unresolvedCritical: 1,
+      unresolvedHigh: 0,
+      unresolvedMedium: 0,
+      unresolvedLow: 0,
+      resolvedTotal: 1,
+    },
+    requirementStats: {
+      totalRequirements: 3,
+      coveredRequirements: 2,
+      uncoveredRequirements: 1,
+      coveragePercentage: 66.7,
+    },
+    criteria: [
+      {
+        id: 'CRITICAL_DEFECTS',
+        name: 'Zero Critical Defects',
+        status: 'FAILED',
+        isBlocker: true,
+        summary: '1 critical defect found',
+        actualValue: '1 critical defects',
+        targetValue: '0',
+      },
+      {
+        id: 'TEST_FAILURES',
+        name: 'Zero Test Failures',
+        status: 'FAILED',
+        isBlocker: true,
+        summary: '1 failing test',
+        actualValue: '1 failed tests',
+        targetValue: '0',
+      },
+      {
+        id: 'BLOCKED_TESTS',
+        name: 'Zero Blocked Tests',
+        status: 'PASSED',
+        isBlocker: true,
+        summary: 'No tests blocked',
+        actualValue: '0 blocked tests',
+        targetValue: '0',
+      },
+      {
+        id: 'TEST_EXECUTION',
+        name: 'Test Suite Verification',
+        status: 'PASSED',
+        isBlocker: true,
+        summary: 'Tests executed',
+        actualValue: '2/3 executed',
+        targetValue: '> 0 executed tests',
+      },
+      {
+        id: 'HIGH_DEFECTS',
+        name: 'Zero High-Severity Defects',
+        status: 'PASSED',
+        isBlocker: false,
+        summary: 'No high severity defects',
+        actualValue: '0 high defects',
+        targetValue: '0',
+      },
+      {
+        id: 'REQUIREMENT_COVERAGE',
+        name: 'Requirement Coverage',
+        status: 'WARNING',
+        isBlocker: false,
+        summary: '1 uncovered requirement',
+        actualValue: '66.7%',
+        targetValue: '100.0%',
+      },
+      {
+        id: 'UNEXECUTED_TESTS',
+        name: 'All Test Cases Executed',
+        status: 'WARNING',
+        isBlocker: false,
+        summary: '1 test case never executed',
+        actualValue: '1 unexecuted',
+        targetValue: '0 unexecuted',
+      },
+      {
+        id: 'PASS_RATE',
+        name: '100% Test Pass Rate',
+        status: 'WARNING',
+        isBlocker: false,
+        summary: 'Pass rate 50%',
+        actualValue: '50.0%',
+        targetValue: '100.0%',
+      },
+    ],
+    evaluatedAt: new Date().toISOString(),
+  };
+
+  const mockReleaseReadinessReady: ReleaseReadinessSummary = {
+    ...mockReleaseReadinessBlocked,
+    status: 'READY',
+    isReady: true,
+    summary: 'All release readiness criteria passed. The project meets all quality gates for production release.',
+    blockers: [],
+    warnings: [],
+    testStats: {
+      totalTests: 3,
+      executedTests: 3,
+      neverExecutedTests: 0,
+      passedTests: 3,
+      failedTests: 0,
+      blockedTests: 0,
+      skippedTests: 0,
+      totalExecutions: 6,
+      passRate: 100.0,
+    },
+    defectStats: {
+      totalDefects: 2,
+      unresolvedTotal: 0,
+      unresolvedCritical: 0,
+      unresolvedHigh: 0,
+      unresolvedMedium: 0,
+      unresolvedLow: 0,
+      resolvedTotal: 2,
+    },
+    requirementStats: {
+      totalRequirements: 3,
+      coveredRequirements: 3,
+      uncoveredRequirements: 0,
+      coveragePercentage: 100.0,
+    },
+    criteria: mockReleaseReadinessBlocked.criteria.map((c) => ({
+      ...c,
+      status: 'PASSED' as const,
+      summary: 'Passed gate',
+    })),
+  };
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(projectApi, 'getAllProjects').mockResolvedValue(mockProjects);
@@ -380,6 +533,7 @@ describe('Phase 5: Test Case Management Components', () => {
     vi.spyOn(documentsApi, 'getDocumentsForProject').mockResolvedValue(mockDocuments);
     vi.spyOn(documentsApi, 'getProjectDocuments').mockResolvedValue(mockDocuments);
     vi.spyOn(testApi, 'getProjectTraceability').mockResolvedValue(mockTraceabilityMatrix);
+    vi.spyOn(testApi, 'getProjectReleaseReadiness').mockResolvedValue(mockReleaseReadinessBlocked);
     vi.spyOn(testApi, 'linkTestCase').mockImplementation(async (id, req) => ({
       ...mockDetail1,
       id,
@@ -968,6 +1122,96 @@ describe('Phase 5: Test Case Management Components', () => {
       expect(screen.getByText('User Authentication Flow')).toBeInTheDocument();
       expect(screen.getByText('Linked PRD Specification')).toBeInTheDocument();
       expect(screen.getAllByText('Platform Architecture & PRD').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ==========================================================================
+  // Phase 5, Step 5: Release Readiness & Quality Gates Tests
+  // ==========================================================================
+
+  it('navigates to Release Readiness subtab and displays evaluation overview with blocked status', async () => {
+    render(<TestCaseManagementView selectedProjectId="proj-1" propProjects={mockProjects} />);
+
+    // Click Release Readiness tab
+    fireEvent.click(screen.getByRole('button', { name: /Release Readiness/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Release Readiness & Quality Gates/i)).toBeInTheDocument();
+      expect(screen.getByTestId('readiness-status-badge')).toHaveTextContent('RELEASE BLOCKED');
+      expect(screen.getByText(/Release is BLOCKED by 1 critical issue\(s\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/3 \/ 8 Passed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('displays critical release blockers alert and recommendations when issues exist', async () => {
+    render(<TestCaseManagementView selectedProjectId="proj-1" propProjects={mockProjects} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Release Readiness/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Critical Release Blockers \(1\)/i)).toBeInTheDocument();
+      expect(screen.getByText('Zero unresolved critical defects: 1 critical defect found')).toBeInTheDocument();
+      expect(screen.getByText(/Recommendations & Warnings \(1\)/i)).toBeInTheDocument();
+      expect(screen.getByText('Requirement coverage is 66.7%: 1 requirement or story uncovered')).toBeInTheDocument();
+    });
+  });
+
+  it('renders all 4 KPI summary cards with actual backend metrics', async () => {
+    render(<TestCaseManagementView selectedProjectId="proj-1" propProjects={mockProjects} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Release Readiness/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('readiness-status-badge')).toBeInTheDocument();
+    });
+
+    // Card 1: Test Execution Pass Rate
+    expect(screen.getAllByText('Test Execution').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('50%')).toBeInTheDocument();
+
+    // Card 2: Defect Health
+    expect(screen.getByText('Defect Health')).toBeInTheDocument();
+    expect(screen.getByText('Unresolved Bugs')).toBeInTheDocument();
+
+    // Card 3: Requirement Coverage
+    expect(screen.getAllByText('Requirement Coverage').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('66.7%').length).toBeGreaterThanOrEqual(1);
+
+    // Card 4: Quality Gate Rules
+    expect(screen.getByText('Quality Gate Rules')).toBeInTheDocument();
+  });
+
+  it('renders quality gates checklist table with all 8 criteria', async () => {
+    render(<TestCaseManagementView selectedProjectId="proj-1" propProjects={mockProjects} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Release Readiness/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Quality Gates Criteria Checklist')).toBeInTheDocument();
+      expect(screen.getByText('8 Quality Gates Checked')).toBeInTheDocument();
+      expect(screen.getByText('Zero Critical Defects')).toBeInTheDocument();
+      expect(screen.getByText('Zero Test Failures')).toBeInTheDocument();
+      expect(screen.getByText('Zero Blocked Tests')).toBeInTheDocument();
+      expect(screen.getByText('Test Suite Verification')).toBeInTheDocument();
+      expect(screen.getByText('Zero High-Severity Defects')).toBeInTheDocument();
+      expect(screen.getByText('All Test Cases Executed')).toBeInTheDocument();
+      expect(screen.getByText('100% Test Pass Rate')).toBeInTheDocument();
+    });
+  });
+
+  it('displays RELEASE READY banner when all quality gates pass', async () => {
+    vi.spyOn(testApi, 'getProjectReleaseReadiness').mockResolvedValue(mockReleaseReadinessReady);
+
+    render(<TestCaseManagementView selectedProjectId="proj-1" propProjects={mockProjects} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Release Readiness/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('readiness-status-badge')).toHaveTextContent('RELEASE READY');
+      expect(screen.getByText(/All release readiness criteria passed/i)).toBeInTheDocument();
+      expect(screen.getByText(/8 \/ 8 Passed/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Critical Release Blockers/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Recommendations & Warnings/i)).not.toBeInTheDocument();
     });
   });
 });
