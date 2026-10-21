@@ -19,6 +19,7 @@ import type {
   DefectStatus,
   ProjectTraceabilityMatrix,
   LinkTestCasePayload,
+  ReleaseReadinessSummary,
 } from '../types/entities';
 
 function getAuthHeaders(): HeadersInit {
@@ -345,6 +346,22 @@ export async function linkTestCase(
     body: JSON.stringify(payload),
   });
   return handleResponse<TestCaseDetail>(res, 'Failed to update test case requirement link');
+}
+
+// ============================================================================
+// Phase 5, Step 5: Release Readiness & Quality Gates API
+// ============================================================================
+
+export async function getProjectReleaseReadiness(
+  projectId: string
+): Promise<ReleaseReadinessSummary> {
+  const res = await fetch(`${API_BASE_URL}/projects/${projectId}/release-readiness`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<ReleaseReadinessSummary>(
+    res,
+    'Failed to fetch project release readiness evaluation'
+  );
 }
 
 

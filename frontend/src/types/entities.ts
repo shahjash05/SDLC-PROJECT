@@ -753,4 +753,65 @@ export interface ProjectTraceabilityMatrix {
   unlinkedTestCases: UnlinkedTestCase[];
 }
 
+// ============================================================================
+// Phase 5, Step 5: Release Readiness & Quality Gates Models
+// ============================================================================
+
+export type ReadinessStatus = 'READY' | 'NEEDS_ATTENTION' | 'BLOCKED';
+
+export interface TestExecutionStats {
+  totalTests: number;
+  executedTests: number;
+  neverExecutedTests: number;
+  passedTests: number;
+  failedTests: number;
+  blockedTests: number;
+  skippedTests: number;
+  totalExecutions: number;
+  passRate: number;
+}
+
+export interface DefectStats {
+  totalDefects: number;
+  unresolvedTotal: number;
+  unresolvedCritical: number;
+  unresolvedHigh: number;
+  unresolvedMedium: number;
+  unresolvedLow: number;
+  resolvedTotal: number;
+}
+
+export interface RequirementCoverageStats {
+  totalRequirements: number;
+  coveredRequirements: number;
+  uncoveredRequirements: number;
+  coveragePercentage: number;
+}
+
+export interface ReadinessCriterion {
+  id: string;
+  name: string;
+  status: 'PASSED' | 'WARNING' | 'FAILED';
+  isBlocker: boolean;
+  summary: string;
+  actualValue: string;
+  targetValue: string;
+}
+
+export interface ReleaseReadinessSummary {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  status: ReadinessStatus;
+  isReady: boolean;
+  summary: string;
+  blockers: string[];
+  warnings: string[];
+  testStats: TestExecutionStats;
+  defectStats: DefectStats;
+  requirementStats: RequirementCoverageStats;
+  criteria: ReadinessCriterion[];
+  evaluatedAt: string;
+}
+
 

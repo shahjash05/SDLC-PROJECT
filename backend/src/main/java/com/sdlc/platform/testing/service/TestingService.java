@@ -12,6 +12,7 @@ import com.sdlc.platform.project.model.Project;
 import com.sdlc.platform.project.repository.ProjectRepository;
 import com.sdlc.platform.security.UserPrincipal;
 import com.sdlc.platform.testing.dto.*;
+import com.sdlc.platform.testing.model.ReadinessStatus;
 import com.sdlc.platform.testing.model.TestCase;
 import com.sdlc.platform.testing.model.TestCaseStatus;
 import com.sdlc.platform.testing.model.TestPriority;
@@ -1045,6 +1046,395 @@ public class TestingService {
                 summary,
                 items,
                 unlinkedDtos
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public ReleaseReadinessDto getReleaseReadiness(UUID projectId, UserPrincipal currentUser) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+
+        organizationService.checkMembershipOrAdmin(project.getOrganization().getId(), currentUser);
+
+        // 1. Retrieve all testing artifacts
+        List<TestCase> testCases = testCaseRepository.findByProjectIdOrderByCaseNumberAsc(projectId);
+        List<Defect> defects = defectRepository.findByProjectIdOrderByDefectNumberDesc(projectId);
+        List<UserStory> userStories = userStoryRepository.findByProjectIdOrderByStoryNumberAsc(projectId);
+        List<Document> prds = documentRepository.findByProjectIdAndTypeOrderByUpdatedAtDesc(projectId, DocumentType.PRODUCT_REQUIREMENTS);
+        List<TestExecution> executions = testExecutionRepository.findByProjectIdOrderByExecutedAtDesc(projectId);
+
+        // Fetch latest executions per test case
+        Map<UUID, TestExecution> latestExecutionByCaseId = new HashMap<>();
+        for (TestExecution exec : executions) {
+            latestExecutionByCaseId.putIfAbsent(exec.getTestCase().getId(), exec);
+        }
+
+        // 2. Compute Test Execution Stats
+        long totalTests = testCases.size();
+        long passedTests = 0;
+        long failedTests = 0;
+        long blockedTests = 0;
+        long skippedTests = 0;
+        long neverExecutedTests = 0;
+
+        for (TestCase tc : testCases) {
+            TestExecution exec = latestExecutionByCaseId.get(tc.getId());
+            if (exec == null) {
+                neverExecutedTests++;
+            } else {
+                switch (exec.getStatus()) {
+                    case PASSED -> passedTests++;
+                    case FAILED -> failedTests++;
+                    case BLOCKED -> blockedTests++;
+                    case SKIPPED -> skippedTests++;
+                }
+            }
+        }
+
+        long executedTests = totalTests - neverExecutedTests;
+        long totalExecutions = testExecutionRepository.countByProjectId(projectId);
+        double passRate = executedTests > 0
+                ? Math.round(((double) passedTests / executedTests * 100.0) * 10.0) / 10.0
+                : 0.0;
+
+        TestExecutionStatsDto testStats = new TestExecutionStatsDto(
+                totalTests,
+                executedTests,
+                neverExecutedTests,
+                passedTests,
+                failedTests,
+                blockedTests,
+                skippedTests,
+                totalExecutions,
+                passRate
+        );
+
+        // 3. Compute Defect Stats
+        long totalDefects = defects.size();
+        long unresolvedCritical = 0;
+        long unresolvedHigh = 0;
+        long unresolvedMedium = 0;
+        long unresolvedLow = 0;
+
+        for (Defect d : defects) {
+            if (d.getStatus() != DefectStatus.RESOLVED && d.getStatus() != DefectStatus.CLOSED) {
+                switch (d.getSeverity()) {
+                    case CRITICAL -> unresolvedCritical++;
+                    case HIGH -> unresolvedHigh++;
+                    case MEDIUM -> unresolvedMedium++;
+                    case LOW -> unresolvedLow++;
+                }
+            }
+        }
+
+        long unresolvedTotal = unresolvedCritical + unresolvedHigh + unresolvedMedium + unresolvedLow;
+        long resolvedTotal = totalDefects - unresolvedTotal;
+
+        DefectStatsDto defectStats = new DefectStatsDto(
+                totalDefects,
+                unresolvedTotal,
+                unresolvedCritical,
+                unresolvedHigh,
+                unresolvedMedium,
+                unresolvedLow,
+                resolvedTotal
+        );
+
+        // 4. Compute Requirement Coverage Stats
+        Set<UUID> coveredStoryIds = new HashSet<>();
+        Set<UUID> coveredPrdIds = new HashSet<>();
+        for (TestCase tc : testCases) {
+            if (tc.getUserStory() != null) {
+                coveredStoryIds.add(tc.getUserStory().getId());
+            }
+            if (tc.getRequirement() != null) {
+                coveredPrdIds.add(tc.getRequirement().getId());
+            }
+        }
+
+        long totalStories = userStories.size();
+        long coveredStories = userStories.stream().filter(s -> coveredStoryIds.contains(s.getId())).count();
+        long totalPrds = prds.size();
+        long coveredPrds = prds.stream().filter(p -> coveredPrdIds.contains(p.getId())).count();
+
+        long totalRequirements = totalStories + totalPrds;
+        long coveredRequirements = coveredStories + coveredPrds;
+        long uncoveredRequirements = totalRequirements - coveredRequirements;
+        double coveragePercentage = totalRequirements > 0
+                ? Math.round(((double) coveredRequirements / totalRequirements * 100.0) * 10.0) / 10.0
+                : 100.0;
+
+        RequirementCoverageStatsDto requirementStats = new RequirementCoverageStatsDto(
+                totalRequirements,
+                coveredRequirements,
+                uncoveredRequirements,
+                coveragePercentage
+        );
+
+        // 5. Evaluate Quality Gates / Criteria Checklist
+        List<ReadinessCriterionDto> criteria = new ArrayList<>();
+        List<String> blockers = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+
+        // Criterion 1: Zero Critical Defects (Blocker)
+        if (unresolvedCritical == 0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "CRITICAL_DEFECTS",
+                    "Zero Unresolved Critical Defects",
+                    "PASSED",
+                    true,
+                    "No unresolved critical severity defects exist in this project.",
+                    "0 critical defects",
+                    "0"
+            ));
+        } else {
+            String msg = String.format("%d unresolved critical defect(s) must be resolved before release", unresolvedCritical);
+            blockers.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "CRITICAL_DEFECTS",
+                    "Zero Unresolved Critical Defects",
+                    "FAILED",
+                    true,
+                    msg,
+                    unresolvedCritical + " critical defects",
+                    "0"
+            ));
+        }
+
+        // Criterion 2: Zero Failing Tests (Blocker)
+        if (failedTests == 0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "TEST_FAILURES",
+                    "Zero Failing Tests",
+                    "PASSED",
+                    true,
+                    "All executed test cases passed with zero failures.",
+                    "0 failures",
+                    "0"
+            ));
+        } else {
+            String msg = String.format("%d test case(s) are currently in FAILED state", failedTests);
+            blockers.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "TEST_FAILURES",
+                    "Zero Failing Tests",
+                    "FAILED",
+                    true,
+                    msg,
+                    failedTests + " failing tests",
+                    "0"
+            ));
+        }
+
+        // Criterion 3: Zero Blocked Tests (Blocker)
+        if (blockedTests == 0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "BLOCKED_TESTS",
+                    "Zero Blocked Tests",
+                    "PASSED",
+                    true,
+                    "No test cases are blocked by external dependencies or blockers.",
+                    "0 blocked",
+                    "0"
+            ));
+        } else {
+            String msg = String.format("%d test case(s) are currently BLOCKED", blockedTests);
+            blockers.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "BLOCKED_TESTS",
+                    "Zero Blocked Tests",
+                    "FAILED",
+                    true,
+                    msg,
+                    blockedTests + " blocked tests",
+                    "0"
+            ));
+        }
+
+        // Criterion 4: Test Suite Verification (Blocker)
+        if (totalTests == 0) {
+            String msg = "No test cases have been authored for this project";
+            blockers.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "TEST_EXECUTION",
+                    "Test Suite Verification",
+                    "FAILED",
+                    true,
+                    msg,
+                    "0 total tests",
+                    "> 0 executed tests"
+            ));
+        } else if (executedTests == 0) {
+            String msg = "Test cases exist but none have been executed yet";
+            blockers.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "TEST_EXECUTION",
+                    "Test Suite Verification",
+                    "FAILED",
+                    true,
+                    msg,
+                    "0 executed tests",
+                    "> 0 executed tests"
+            ));
+        } else {
+            criteria.add(new ReadinessCriterionDto(
+                    "TEST_EXECUTION",
+                    "Test Suite Verification",
+                    "PASSED",
+                    true,
+                    String.format("%d of %d test cases have recorded executions.", executedTests, totalTests),
+                    executedTests + "/" + totalTests + " executed",
+                    "> 0 executed tests"
+            ));
+        }
+
+        // Criterion 5: Zero High-Severity Defects (Warning)
+        if (unresolvedHigh == 0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "HIGH_DEFECTS",
+                    "Zero High-Severity Defects",
+                    "PASSED",
+                    false,
+                    "No unresolved high severity defects exist in this project.",
+                    "0 high defects",
+                    "0"
+            ));
+        } else {
+            String msg = String.format("%d unresolved high-severity defect(s) should be triaged or resolved", unresolvedHigh);
+            warnings.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "HIGH_DEFECTS",
+                    "Zero High-Severity Defects",
+                    "WARNING",
+                    false,
+                    msg,
+                    unresolvedHigh + " high defects",
+                    "0"
+            ));
+        }
+
+        // Criterion 6: Requirement Coverage (Warning)
+        if (totalRequirements == 0 || uncoveredRequirements == 0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "REQUIREMENT_COVERAGE",
+                    "Requirement Coverage",
+                    "PASSED",
+                    false,
+                    totalRequirements == 0
+                            ? "No formal requirements or PRDs recorded for this project."
+                            : String.format("100%% requirement coverage across all %d requirement(s).", totalRequirements),
+                    coveragePercentage + "%",
+                    "100.0%"
+            ));
+        } else {
+            String msg = String.format("%d requirement(s) or story/stories have no linked test coverage", uncoveredRequirements);
+            warnings.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "REQUIREMENT_COVERAGE",
+                    "Requirement Coverage",
+                    "WARNING",
+                    false,
+                    msg,
+                    coveragePercentage + "% (" + coveredRequirements + "/" + totalRequirements + ")",
+                    "100.0%"
+            ));
+        }
+
+        // Criterion 7: All Test Cases Executed (Warning)
+        if (totalTests > 0 && neverExecutedTests == 0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "UNEXECUTED_TESTS",
+                    "All Test Cases Executed",
+                    "PASSED",
+                    false,
+                    "100% of defined test cases have been verified in test runs.",
+                    "0 unexecuted",
+                    "0 unexecuted"
+            ));
+        } else if (totalTests > 0) {
+            String msg = String.format("%d test case(s) have never been executed", neverExecutedTests);
+            warnings.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "UNEXECUTED_TESTS",
+                    "All Test Cases Executed",
+                    "WARNING",
+                    false,
+                    msg,
+                    neverExecutedTests + " unexecuted",
+                    "0 unexecuted"
+            ));
+        }
+
+        // Criterion 8: Test Pass Rate Target (Warning)
+        if (executedTests > 0 && passRate >= 100.0) {
+            criteria.add(new ReadinessCriterionDto(
+                    "PASS_RATE",
+                    "100% Test Pass Rate",
+                    "PASSED",
+                    false,
+                    "100% of executed test cases are currently passing.",
+                    "100.0%",
+                    "100.0%"
+            ));
+        } else if (executedTests > 0 && passRate >= 90.0) {
+            String msg = String.format("Test pass rate is %.1f%% (target is 100.0%%)", passRate);
+            warnings.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "PASS_RATE",
+                    "100% Test Pass Rate",
+                    "WARNING",
+                    false,
+                    msg,
+                    passRate + "%",
+                    "100.0%"
+            ));
+        } else if (executedTests > 0) {
+            String msg = String.format("Test pass rate is below threshold at %.1f%%", passRate);
+            warnings.add(msg);
+            criteria.add(new ReadinessCriterionDto(
+                    "PASS_RATE",
+                    "100% Test Pass Rate",
+                    "WARNING",
+                    false,
+                    msg,
+                    passRate + "%",
+                    "100.0%"
+            ));
+        }
+
+        // 6. Overall Readiness Status
+        ReadinessStatus status;
+        boolean isReady;
+        String summaryText;
+
+        if (!blockers.isEmpty()) {
+            status = ReadinessStatus.BLOCKED;
+            isReady = false;
+            summaryText = String.format("Release is BLOCKED by %d critical issue(s). Resolve all blockers before release.", blockers.size());
+        } else if (!warnings.isEmpty()) {
+            status = ReadinessStatus.NEEDS_ATTENTION;
+            isReady = false;
+            summaryText = String.format("Release has %d warning(s). Review recommendations and sign off prior to deployment.", warnings.size());
+        } else {
+            status = ReadinessStatus.READY;
+            isReady = true;
+            summaryText = "All release readiness criteria passed. The project meets all quality gates for production release.";
+        }
+
+        return new ReleaseReadinessDto(
+                projectId,
+                project.getProjectKey(),
+                project.getName(),
+                status,
+                isReady,
+                summaryText,
+                blockers,
+                warnings,
+                testStats,
+                defectStats,
+                requirementStats,
+                criteria,
+                Instant.now()
         );
     }
 

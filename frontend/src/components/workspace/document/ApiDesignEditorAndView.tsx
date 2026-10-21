@@ -634,6 +634,14 @@ export const IMPLEMENTED_BACKEND_ENDPOINTS: BackendEndpointReference[] = [
     authRequired: true,
     implementedIn: 'TestingController (Port 8081)',
   },
+  {
+    domain: 'Testing & QA',
+    method: 'GET',
+    path: '/api/v1/projects/{projectId}/release-readiness',
+    summary: 'Evaluate project release readiness against quality gates (blockers, warnings, test pass rate, defect severity)',
+    authRequired: true,
+    implementedIn: 'TestingController (Port 8081)',
+  },
 
   // System Health & Liveness (HealthController)
   {

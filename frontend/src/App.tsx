@@ -66,65 +66,12 @@ function StatusBadge({ state, label }: StatusBadgeProps) {
   );
 }
 
-interface RoadmapPhase {
-  phase: string;
-  name: string;
-  description: string;
-  status: string;
-  statusVariant: 'completed' | 'active' | 'next' | 'planned';
-}
-
-const ROADMAP_PHASES: RoadmapPhase[] = [
-  {
-    phase: 'Phase 0',
-    name: 'Foundation & Infrastructure',
-    description: 'Project setup, PostgreSQL container, Flyway baseline schema, Spring Boot 3 & Vite React client.',
-    status: 'Completed',
-    statusVariant: 'completed' as const,
-  },
-  {
-    phase: 'Phase 1',
-    name: 'Authentication & Permissions',
-    description: 'User registration, login, JWT token auth, RBAC (Developer, Team Lead, Faculty, Client, Admin).',
-    status: 'Completed',
-    statusVariant: 'completed' as const,
-  },
-  {
-    phase: 'Phase 2',
-    name: 'Organizations, Teams & Projects',
-    description: 'Workspace hierarchy, project creation, member invites, and role delegation.',
-    status: 'Completed',
-    statusVariant: 'completed' as const,
-  },
-  {
-    phase: 'Phase 3',
-    name: 'Requirements & Sprint Planning',
-    description: 'User stories, acceptance criteria, backlogs, sprint boards, and task tracking.',
-    status: 'Completed',
-    statusVariant: 'completed' as const,
-  },
-  {
-    phase: 'Phase 4',
-    name: 'Documents & Architecture Diagrams',
-    description: 'Collaborative technical specifications, Mermaid architecture diagrams, and review workflows.',
-    status: 'Active (Current)',
-    statusVariant: 'active' as const,
-  },
-  {
-    phase: 'Phase 5',
-    name: 'QA & Bug Tracking',
-    description: 'Test case authoring, execution runs, defect lifecycle, and release readiness reporting.',
-    status: 'Planned',
-    statusVariant: 'planned' as const,
-  },
-];
-
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [activeTab, setActiveTab] = useState<'workspace' | 'diagnostics'>('workspace');
 
-  // Phase 0 health check states
+  // Runtime health check states
   const [health, setHealth] = useState<ApiResponse<HealthStatus> | null>(null);
   const [actuator, setActuator] = useState<ActuatorHealth | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
@@ -203,10 +150,6 @@ function AppContent() {
           <div className="flex items-center gap-3">
             <span className="font-semibold text-slate-900 tracking-tight text-base">
               SDLC Platform
-            </span>
-            <span className="text-slate-300">/</span>
-            <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-              Phase 1 Auth
             </span>
           </div>
 
@@ -349,7 +292,7 @@ function AppContent() {
                   Collaborative SDLC Platform
                 </h1>
                 <p className="text-sm text-slate-600">
-                  Phase 1 Authentication &amp; Role-Based Access Control
+                  Collaborative Engineering &amp; Delivery Lifecycle Platform
                 </p>
               </div>
 
@@ -363,14 +306,14 @@ function AppContent() {
             </div>
           )
         ) : (
-          /* System Diagnostics View (Phase 0 Health Monitoring) */
+          /* System Diagnostics View */
           <div className="space-y-8">
             <div>
               <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
                 System Diagnostics &amp; Health Monitoring
               </h1>
               <p className="text-sm text-slate-600 mt-1">
-                Phase 0 runtime connectivity, PostgreSQL status, and implementation roadmap.
+                Runtime service connectivity, PostgreSQL status, and infrastructure diagnostics.
               </p>
             </div>
 
@@ -446,70 +389,12 @@ function AppContent() {
                 </div>
               </div>
             </section>
-
-            {/* Section 2: Implementation Roadmap */}
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                  Implementation Roadmap
-                </h2>
-                <span className="text-xs text-slate-500">
-                  Current Phase: Phase 1 Authentication
-                </span>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-md divide-y divide-slate-100">
-                {ROADMAP_PHASES.map((item) => (
-                  <div
-                    key={item.phase}
-                    className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 transition-colors hover:bg-slate-50/50"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-medium text-slate-500">
-                          {item.phase}:
-                        </span>
-                        <span className="text-sm font-medium text-slate-900">
-                          {item.name}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 max-w-2xl">
-                        {item.description}
-                      </p>
-                    </div>
-
-                    <div className="sm:text-right flex-shrink-0">
-                      {item.statusVariant === 'completed' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                          {item.status}
-                        </span>
-                      )}
-                      {item.statusVariant === 'active' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          {item.status}
-                        </span>
-                      )}
-                      {item.statusVariant === 'next' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                          {item.status}
-                        </span>
-                      )}
-                      {item.statusVariant === 'planned' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-slate-500">
-                          {item.status}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
           </div>
         )}
 
         {/* Footer */}
         <footer className="border-t border-slate-200 pt-6 text-xs text-slate-500 flex flex-col sm:flex-row justify-between gap-2">
-          <span>SDLC Platform · Phase 1 Authentication &amp; RBAC</span>
+          <span>SDLC Platform · Collaborative Software Delivery Lifecycle</span>
           <span>Clean Light Theme · Spring Boot 3.4 &amp; React 19</span>
         </footer>
       </main>

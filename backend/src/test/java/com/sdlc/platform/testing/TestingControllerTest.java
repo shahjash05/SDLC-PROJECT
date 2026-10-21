@@ -871,4 +871,115 @@ class TestingControllerTest {
                         .header("Authorization", outsiderToken))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void getReleaseReadiness_whenProjectBlockedByCriticalDefectsAndFailures_returnsBlocked() throws Exception {
+        UserStory story = userStoryRepository.save(new UserStory(
+                project, 201, "Auth Module", "User login", "Criteria",
+                StoryPriority.HIGH, 3, orgMember, orgOwner
+        ));
+
+        TestCase tcPassed = testCaseRepository.save(new TestCase(
+                project, null, 10, "Valid Login", "Desc", "Pre", "Steps", "Exp",
+                TestPriority.HIGH, TestCaseStatus.ACTIVE, orgOwner
+        ));
+        tcPassed.setUserStory(story);
+        tcPassed = testCaseRepository.save(tcPassed);
+
+        TestCase tcFailed = testCaseRepository.save(new TestCase(
+                project, null, 11, "OAuth Google Login", "Desc", "Pre", "Steps", "Exp",
+                TestPriority.CRITICAL, TestCaseStatus.ACTIVE, orgMember
+        ));
+
+        TestCase tcUnexecuted = testCaseRepository.save(new TestCase(
+                project, null, 12, "SAML Login", "Desc", "Pre", "Steps", "Exp",
+                TestPriority.MEDIUM, TestCaseStatus.ACTIVE, orgMember
+        ));
+
+        testExecutionRepository.save(new TestExecution(
+                tcPassed, project, TestExecutionStatus.PASSED, "Logged in OK", "Evidence", 100, orgMember
+        ));
+        TestExecution failedExec = testExecutionRepository.save(new TestExecution(
+                tcFailed, project, TestExecutionStatus.FAILED, "NullPointerException on token exchange", "Crash dump", 150, orgMember
+        ));
+
+        defectRepository.save(new Defect(
+                project, 101, "Google OAuth 500 error", "Desc", "Steps", "Exp", "Act",
+                DefectSeverity.CRITICAL, TestPriority.CRITICAL, DefectStatus.OPEN,
+                tcFailed, failedExec, orgMember, orgOwner
+        ));
+
+        defectRepository.save(new Defect(
+                project, 102, "Incorrect styling on submit button", "Desc", "Steps", "Exp", "Act",
+                DefectSeverity.HIGH, TestPriority.MEDIUM, DefectStatus.IN_PROGRESS,
+                tcFailed, null, orgMember, orgOwner
+        ));
+
+        mockMvc.perform(get("/api/v1/projects/" + project.getId() + "/release-readiness")
+                        .header("Authorization", memberToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.projectKey").value("QP"))
+                .andExpect(jsonPath("$.data.status").value("BLOCKED"))
+                .andExpect(jsonPath("$.data.isReady").value(false))
+                .andExpect(jsonPath("$.data.testStats.totalTests").value(3))
+                .andExpect(jsonPath("$.data.testStats.executedTests").value(2))
+                .andExpect(jsonPath("$.data.testStats.neverExecutedTests").value(1))
+                .andExpect(jsonPath("$.data.testStats.passedTests").value(1))
+                .andExpect(jsonPath("$.data.testStats.failedTests").value(1))
+                .andExpect(jsonPath("$.data.testStats.passRate").value(50.0))
+                .andExpect(jsonPath("$.data.defectStats.totalDefects").value(2))
+                .andExpect(jsonPath("$.data.defectStats.unresolvedCritical").value(1))
+                .andExpect(jsonPath("$.data.defectStats.unresolvedHigh").value(1))
+                .andExpect(jsonPath("$.data.blockers", hasSize(2))) // Critical defect blocker and Failed tests blocker
+                .andExpect(jsonPath("$.data.warnings", hasSize(3))) // High defect warning, Unexecuted test warning, and Pass rate warning
+                .andExpect(jsonPath("$.data.criteria", hasSize(8)));
+    }
+
+    @Test
+    void getReleaseReadiness_whenProjectMeetsAllQualityGates_returnsReady() throws Exception {
+        UserStory story = userStoryRepository.save(new UserStory(
+                project, 301, "Ready Feature", "Feature details", "Criteria",
+                StoryPriority.MEDIUM, 2, orgMember, orgOwner
+        ));
+
+        TestCase tc = testCaseRepository.save(new TestCase(
+                project, null, 20, "Complete Verification", "Desc", "Pre", "Steps", "Exp",
+                TestPriority.HIGH, TestCaseStatus.ACTIVE, orgOwner
+        ));
+        tc.setUserStory(story);
+        tc = testCaseRepository.save(tc);
+
+        testExecutionRepository.save(new TestExecution(
+                tc, project, TestExecutionStatus.PASSED, "Execution passed flawlessly", "Pass logs", 90, orgMember
+        ));
+
+        // Add a RESOLVED defect (should not block or warn)
+        defectRepository.save(new Defect(
+                project, 201, "Resolved Bug", "Desc", "Steps", "Exp", "Act",
+                DefectSeverity.CRITICAL, TestPriority.CRITICAL, DefectStatus.RESOLVED,
+                tc, null, orgMember, orgOwner
+        ));
+
+        mockMvc.perform(get("/api/v1/projects/" + project.getId() + "/release-readiness")
+                        .header("Authorization", memberToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("READY"))
+                .andExpect(jsonPath("$.data.isReady").value(true))
+                .andExpect(jsonPath("$.data.testStats.totalTests").value(1))
+                .andExpect(jsonPath("$.data.testStats.executedTests").value(1))
+                .andExpect(jsonPath("$.data.testStats.passedTests").value(1))
+                .andExpect(jsonPath("$.data.testStats.passRate").value(100.0))
+                .andExpect(jsonPath("$.data.defectStats.unresolvedCritical").value(0))
+                .andExpect(jsonPath("$.data.defectStats.unresolvedHigh").value(0))
+                .andExpect(jsonPath("$.data.requirementStats.coveragePercentage").value(100.0))
+                .andExpect(jsonPath("$.data.blockers", hasSize(0)))
+                .andExpect(jsonPath("$.data.warnings", hasSize(0)));
+    }
+
+    @Test
+    void getReleaseReadiness_outsiderForbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/projects/" + project.getId() + "/release-readiness")
+                        .header("Authorization", outsiderToken))
+                .andExpect(status().isForbidden());
+    }
 }

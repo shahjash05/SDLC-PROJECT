@@ -298,4 +298,17 @@ public class TestingController {
         ProjectTraceabilityMatrixDto matrix = testingService.getProjectTraceabilityMatrix(projectId, currentUser);
         return ResponseEntity.ok(ApiResponse.ok(matrix));
     }
+
+    // =========================================================
+    // Release Readiness Endpoints
+    // =========================================================
+
+    @GetMapping("/projects/{projectId}/release-readiness")
+    public ResponseEntity<ApiResponse<ReleaseReadinessDto>> getReleaseReadiness(
+            @PathVariable UUID projectId,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        ReleaseReadinessDto readiness = testingService.getReleaseReadiness(projectId, currentUser);
+        return ResponseEntity.ok(ApiResponse.ok(readiness));
+    }
 }

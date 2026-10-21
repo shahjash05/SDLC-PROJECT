@@ -21,6 +21,7 @@ import {
   Link2,
   BookOpen,
   GitMerge,
+  ShieldCheck,
 } from 'lucide-react';
 import { getAllProjects } from '../../api/projects';
 import { getProjectStories } from '../../api/requirements';
@@ -43,6 +44,7 @@ import {
 } from '../../api/testing';
 import { DefectTrackingView, getDefectSeverityBadge, getDefectStatusBadge } from './DefectTrackingView';
 import { TraceabilityMatrixView } from './TraceabilityMatrixView';
+import { ReleaseReadinessView } from './ReleaseReadinessView';
 import type {
   ProjectSummary,
   TestSuite,
@@ -145,8 +147,8 @@ export function TestCaseManagementView({
   const [showExecuteModal, setShowExecuteModal] = useState(false);
   const [showRecentExecutionsModal, setShowRecentExecutionsModal] = useState(false);
 
-  // Subview Switcher: 'test-cases' vs 'defects' vs 'traceability'
-  const [activeSubView, setActiveSubView] = useState<'test-cases' | 'defects' | 'traceability'>('test-cases');
+  // Subview Switcher: 'test-cases' vs 'defects' vs 'traceability' vs 'readiness'
+  const [activeSubView, setActiveSubView] = useState<'test-cases' | 'defects' | 'traceability' | 'readiness'>('test-cases');
   const [prefilledDefect, setPrefilledDefect] = useState<CreateDefectPayload | null>(null);
 
   // Requirements & Stories available for linking
@@ -699,6 +701,19 @@ export function TestCaseManagementView({
           <GitMerge className="w-4 h-4 text-indigo-600" />
           <span>Requirements Traceability</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubView('readiness')}
+          className={`pb-3 px-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeSubView === 'readiness'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          <span>Release Readiness</span>
+        </button>
       </div>
 
       {activeSubView === 'defects' && (
@@ -712,6 +727,13 @@ export function TestCaseManagementView({
 
       {activeSubView === 'traceability' && (
         <TraceabilityMatrixView
+          selectedProjectId={activeProjectId}
+          propProjects={projects}
+        />
+      )}
+
+      {activeSubView === 'readiness' && (
+        <ReleaseReadinessView
           selectedProjectId={activeProjectId}
           propProjects={projects}
         />
